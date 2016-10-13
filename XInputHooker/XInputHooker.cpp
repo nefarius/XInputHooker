@@ -7,11 +7,14 @@
 #include <Xinput.h>
 #include "MinHook.h"
 
-typedef BOOL(WINAPI *SetupDiEnumDeviceInterfaces_t)(HDEVINFO, PSP_DEVINFO_DATA, const GUID *, DWORD, PSP_DEVICE_INTERFACE_DATA);
 typedef VOID(WINAPI *XInputEnable_t)(BOOL);
 typedef DWORD(WINAPI *XInputGetState_t)(DWORD, XINPUT_STATE *);
 
+typedef BOOL(WINAPI *SetupDiEnumDeviceInterfaces_t)(HDEVINFO, PSP_DEVINFO_DATA, const GUID *, DWORD, PSP_DEVICE_INTERFACE_DATA);
+typedef BOOL(WINAPI *DeviceIoControl_t)(HANDLE, DWORD, LPVOID, DWORD, LPVOID, DWORD, LPDWORD, LPOVERLAPPED);
+
 SetupDiEnumDeviceInterfaces_t fpSetupDiEnumDeviceInterfaces = nullptr;
+DeviceIoControl_t fpDeviceIoControl = nullptr;
 
 BOOL DetourSetupDiEnumDeviceInterfaces(
     HDEVINFO                  DeviceInfoSet,
@@ -29,6 +32,23 @@ BOOL DetourSetupDiEnumDeviceInterfaces(
     return fpSetupDiEnumDeviceInterfaces(DeviceInfoSet, DeviceInfoData, InterfaceClassGuid, MemberIndex, DeviceInterfaceData);
 }
 
+BOOL WINAPI DetourDeviceIoControl(
+    HANDLE       hDevice,
+    DWORD        dwIoControlCode,
+    LPVOID       lpInBuffer,
+    DWORD        nInBufferSize,
+    LPVOID       lpOutBuffer,
+    DWORD        nOutBufferSize,
+    LPDWORD      lpBytesReturned,
+    LPOVERLAPPED lpOverlapped
+)
+{
+    printf("DeviceIoControl called (nOutBufferSize = %lu)\n", nOutBufferSize);
+
+    return fpDeviceIoControl(hDevice, dwIoControlCode, lpInBuffer, nInBufferSize, lpOutBuffer, nOutBufferSize, lpBytesReturned, lpOverlapped);
+}
+
+
 template <typename T>
 inline MH_STATUS MH_CreateHookEx(LPVOID pTarget, LPVOID pDetour, T** ppOriginal)
 {
@@ -45,15 +65,11 @@ inline MH_STATUS MH_CreateHookApiEx(
 
 int main()
 {
-    MH_STATUS stat;
-
     // Initialize MinHook.
     if (MH_Initialize() != MH_OK)
     {
         return 1;
     }
-
-    //auto setupapi = LoadLibrary(L"setupapi.dll");
 
     if (MH_CreateHook(&SetupDiEnumDeviceInterfaces, &DetourSetupDiEnumDeviceInterfaces,
         reinterpret_cast<LPVOID*>(&fpSetupDiEnumDeviceInterfaces)) != MH_OK)
@@ -61,14 +77,18 @@ int main()
         return 1;
     }
 
-    // or you can use the new helper function like this.
-    //if ((stat = MH_CreateHookApiEx(
-    //    L"setupapi", "SetupDiEnumDeviceInterfaces", &DetourSetupDiEnumDeviceInterfaces, &fpSetupDiEnumDeviceInterfaces)) != MH_OK)
-    //{
-    //    return 1;
-    //}
+    if (MH_EnableHook(&SetupDiEnumDeviceInterfaces) != MH_OK)
+    {
+        return 1;
+    }
 
-    if ((stat = MH_EnableHook(&SetupDiEnumDeviceInterfaces)) != MH_OK)
+    if (MH_CreateHook(&DeviceIoControl, &DetourDeviceIoControl,
+        reinterpret_cast<LPVOID*>(&fpDeviceIoControl)) != MH_OK)
+    {
+        return 1;
+    }
+
+    if (MH_EnableHook(&DeviceIoControl) != MH_OK)
     {
         return 1;
     }
@@ -79,9 +99,12 @@ int main()
 
     enable(TRUE);
     XINPUT_STATE state;
-    auto retval = getState(0, &state);
 
-    getchar();
+    while (TRUE)
+    {
+        getState(1, &state);
+        Sleep(1000);
+    };
 
     // Disable the hook for MessageBoxW.
     if (MH_DisableHook(MH_ALL_HOOKS) != MH_OK)
