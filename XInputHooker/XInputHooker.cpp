@@ -2,6 +2,7 @@
 //
 
 #include "stdafx.h"
+#include "MinHook.h"
 
 
 int main()
