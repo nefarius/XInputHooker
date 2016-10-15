@@ -16,6 +16,9 @@ typedef BOOL(WINAPI *DeviceIoControl_t)(HANDLE, DWORD, LPVOID, DWORD, LPVOID, DW
 SetupDiEnumDeviceInterfaces_t fpSetupDiEnumDeviceInterfaces = nullptr;
 DeviceIoControl_t fpDeviceIoControl = nullptr;
 
+FILE *fLog = nullptr;
+unsigned long counter = 0;
+
 BOOL DetourSetupDiEnumDeviceInterfaces(
     HDEVINFO                  DeviceInfoSet,
     PSP_DEVINFO_DATA          DeviceInfoData,
@@ -43,9 +46,28 @@ BOOL WINAPI DetourDeviceIoControl(
     LPOVERLAPPED lpOverlapped
 )
 {
-    printf("DeviceIoControl called (nOutBufferSize = %lu)\n", nOutBufferSize);
+    auto inBuffer = static_cast<PUCHAR>(lpInBuffer);
+    auto packetCount = counter++;
 
-    return fpDeviceIoControl(hDevice, dwIoControlCode, lpInBuffer, nInBufferSize, lpOutBuffer, nOutBufferSize, lpBytesReturned, lpOverlapped);
+    fprintf(fLog, "\n[%010lu] [%08lu] [%08lu] [I] - ", packetCount, dwIoControlCode, nInBufferSize);
+
+    for (auto i = 0; i < nInBufferSize; i++)
+    {
+        fprintf(fLog, "%02X ", inBuffer[i]);
+    }
+
+    auto retval = fpDeviceIoControl(hDevice, dwIoControlCode, lpInBuffer, nInBufferSize, lpOutBuffer, nOutBufferSize, lpBytesReturned, lpOverlapped);
+
+    auto outBuffer = static_cast<PUCHAR>(lpOutBuffer);
+
+    fprintf(fLog, "\n[%010lu] [%08lu] [%08lu] [O] - ", packetCount, dwIoControlCode, *lpBytesReturned);
+
+    for (auto i = 0; i < *lpBytesReturned; i++)
+    {
+        fprintf(fLog, "%02X ", outBuffer[i]);
+    }
+
+    return retval;
 }
 
 
@@ -65,6 +87,9 @@ inline MH_STATUS MH_CreateHookApiEx(
 
 int main()
 {
+    fopen_s(&fLog, "xinput.log", "wt");
+    fprintf(fLog, "Time stamp, I/O control code, buffer size, input or output\n");
+
     // Initialize MinHook.
     if (MH_Initialize() != MH_OK)
     {
@@ -100,12 +125,8 @@ int main()
     enable(TRUE);
     XINPUT_STATE state;
 
-    while (TRUE)
-    {
-        getState(1, &state);
-        Sleep(1000);
-    };
-
+    printf("XInputGetState = 0x%X\n", getState(0, &state));
+    
     // Disable the hook for MessageBoxW.
     if (MH_DisableHook(MH_ALL_HOOKS) != MH_OK)
     {
