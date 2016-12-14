@@ -49,7 +49,7 @@ BOOL WINAPI DetourDeviceIoControl(
     auto inBuffer = static_cast<PUCHAR>(lpInBuffer);
     auto packetCount = counter++;
 
-    fprintf(fLog, "\n[%010lu] [%08lu] [%08lu] [I] - ", packetCount, dwIoControlCode, nInBufferSize);
+    fprintf(fLog, "\n[%010lu] [%08X] [%08lu] [I] - ", packetCount, dwIoControlCode, nInBufferSize);
 
     for (auto i = 0; i < nInBufferSize; i++)
     {
@@ -60,7 +60,7 @@ BOOL WINAPI DetourDeviceIoControl(
 
     auto outBuffer = static_cast<PUCHAR>(lpOutBuffer);
 
-    fprintf(fLog, "\n[%010lu] [%08lu] [%08lu] [O] - ", packetCount, dwIoControlCode, *lpBytesReturned);
+    fprintf(fLog, "\n[%010lu] [%08X] [%08lu] [O] - ", packetCount, dwIoControlCode, *lpBytesReturned);
 
     for (auto i = 0; i < *lpBytesReturned; i++)
     {
