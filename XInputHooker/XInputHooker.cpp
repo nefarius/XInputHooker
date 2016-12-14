@@ -88,7 +88,7 @@ inline MH_STATUS MH_CreateHookApiEx(
 int main()
 {
     fopen_s(&fLog, "xinput.log", "wt");
-    fprintf(fLog, "Time stamp, I/O control code, buffer size, input or output\n");
+    fprintf(fLog, "[Time stamp] [I/O ctrl] [buffsize]\n");
 
     // Initialize MinHook.
     if (MH_Initialize() != MH_OK)
