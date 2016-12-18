@@ -67,6 +67,16 @@ BOOL WINAPI DetourDeviceIoControl(
         fprintf(fLog, "%02X ", outBuffer[i]);
     }
 
+    if (dwIoControlCode == 0x8000E00C)
+    {
+        fprintf(stdout ,"\n[%010lu] [%08X] [%08lu] [O] - ", packetCount, dwIoControlCode, *lpBytesReturned);
+
+        for (auto i = 0; i < *lpBytesReturned; i++)
+        {
+            fprintf(stdout, "%02X ", outBuffer[i]);
+        }
+    }
+
     return retval;
 }
 
@@ -124,9 +134,14 @@ int main()
 
     enable(TRUE);
     XINPUT_STATE state;
+    DWORD retval;
 
-    printf("XInputGetState = 0x%X\n", getState(0, &state));
-    
+    while ((retval = getState(0, &state)) == ERROR_SUCCESS)
+    {
+        printf("XInputGetState = 0x%X\n", retval);
+        Sleep(50);
+    }
+
     // Disable the hook for MessageBoxW.
     if (MH_DisableHook(MH_ALL_HOOKS) != MH_OK)
     {
