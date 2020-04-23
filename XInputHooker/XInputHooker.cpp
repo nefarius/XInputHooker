@@ -1,159 +1,207 @@
 // XInputHooker.cpp : Defines the entry point for the console application.
 //
 
-#include "stdafx.h"
+#define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include <SetupAPI.h>
-#include <Xinput.h>
-#include "MinHook.h"
+#include <initguid.h>
+#include <winioctl.h>
+#include "XUSB.h"
 
-typedef VOID(WINAPI *XInputEnable_t)(BOOL);
-typedef DWORD(WINAPI *XInputGetState_t)(DWORD, XINPUT_STATE *);
+//
+// Hooking
+// 
+#include <detours/detours.h>
 
-typedef BOOL(WINAPI *SetupDiEnumDeviceInterfaces_t)(HDEVINFO, PSP_DEVINFO_DATA, const GUID *, DWORD, PSP_DEVICE_INTERFACE_DATA);
-typedef BOOL(WINAPI *DeviceIoControl_t)(HANDLE, DWORD, LPVOID, DWORD, LPVOID, DWORD, LPDWORD, LPOVERLAPPED);
+//
+// Logging
+// 
+#include <spdlog/spdlog.h>
+#include <spdlog/sinks/basic_file_sink.h>
+#include <spdlog/fmt/bin_to_hex.h>
 
-SetupDiEnumDeviceInterfaces_t fpSetupDiEnumDeviceInterfaces = nullptr;
-DeviceIoControl_t fpDeviceIoControl = nullptr;
 
-FILE *fLog = nullptr;
-unsigned long counter = 0;
+static BOOL(WINAPI* real_SetupDiEnumDeviceInterfaces)(HDEVINFO, PSP_DEVINFO_DATA, const GUID*, DWORD, PSP_DEVICE_INTERFACE_DATA) = SetupDiEnumDeviceInterfaces;
+static BOOL(WINAPI* real_DeviceIoControl)(HANDLE, DWORD, LPVOID, DWORD, LPVOID, DWORD, LPDWORD, LPOVERLAPPED) = DeviceIoControl;
 
-BOOL DetourSetupDiEnumDeviceInterfaces(
-    HDEVINFO                  DeviceInfoSet,
-    PSP_DEVINFO_DATA          DeviceInfoData,
-    const GUID                *InterfaceClassGuid,
-    DWORD                     MemberIndex,
-    PSP_DEVICE_INTERFACE_DATA DeviceInterfaceData
+
+//
+// Hooks SetupDiEnumDeviceInterfaces() API
+// 
+BOOL WINAPI DetourSetupDiEnumDeviceInterfaces(
+	HDEVINFO                  DeviceInfoSet,
+	PSP_DEVINFO_DATA          DeviceInfoData,
+	const GUID* InterfaceClassGuid,
+	DWORD                     MemberIndex,
+	PSP_DEVICE_INTERFACE_DATA DeviceInterfaceData
 )
 {
-    printf("GUID = {%08lX-%04hX-%04hX-%02hhX%02hhX-%02hhX%02hhX%02hhX%02hhX%02hhX%02hhX}\n",
-        InterfaceClassGuid->Data1, InterfaceClassGuid->Data2, InterfaceClassGuid->Data3,
-        InterfaceClassGuid->Data4[0], InterfaceClassGuid->Data4[1], InterfaceClassGuid->Data4[2], InterfaceClassGuid->Data4[3],
-        InterfaceClassGuid->Data4[4], InterfaceClassGuid->Data4[5], InterfaceClassGuid->Data4[6], InterfaceClassGuid->Data4[7]);
+	auto retval = real_SetupDiEnumDeviceInterfaces(DeviceInfoSet, DeviceInfoData, InterfaceClassGuid, MemberIndex, DeviceInterfaceData);
 
-    return fpSetupDiEnumDeviceInterfaces(DeviceInfoSet, DeviceInfoData, InterfaceClassGuid, MemberIndex, DeviceInterfaceData);
+	spdlog::info("SetupDiEnumDeviceInterfaces: InterfaceClassGuid = {{{0:X}-{1:X}-{2:X}-{3:X}{4:X}-{5:X}{6:X}{7:X}{8:X}{9:X}{10:X}}}, " \
+		"return = 0x{11:X}, error = 0x{12:X}",
+		InterfaceClassGuid->Data1, InterfaceClassGuid->Data2, InterfaceClassGuid->Data3,
+		InterfaceClassGuid->Data4[0], InterfaceClassGuid->Data4[1], InterfaceClassGuid->Data4[2], InterfaceClassGuid->Data4[3],
+		InterfaceClassGuid->Data4[4], InterfaceClassGuid->Data4[5], InterfaceClassGuid->Data4[6], InterfaceClassGuid->Data4[7],
+		retval, GetLastError());
+
+	return retval;
 }
 
+//
+// Hooks DeviceIoControl() API
+// 
 BOOL WINAPI DetourDeviceIoControl(
-    HANDLE       hDevice,
-    DWORD        dwIoControlCode,
-    LPVOID       lpInBuffer,
-    DWORD        nInBufferSize,
-    LPVOID       lpOutBuffer,
-    DWORD        nOutBufferSize,
-    LPDWORD      lpBytesReturned,
-    LPOVERLAPPED lpOverlapped
+	HANDLE       hDevice,
+	DWORD        dwIoControlCode,
+	LPVOID       lpInBuffer,
+	DWORD        nInBufferSize,
+	LPVOID       lpOutBuffer,
+	DWORD        nOutBufferSize,
+	LPDWORD      lpBytesReturned,
+	LPOVERLAPPED lpOverlapped
 )
 {
-    auto inBuffer = static_cast<PUCHAR>(lpInBuffer);
-    auto packetCount = counter++;
+	const PUCHAR charInBuf = (PUCHAR)lpInBuffer;
+	const std::vector<char> inBuffer(charInBuf, charInBuf + nInBufferSize);
 
-    fprintf(fLog, "\n[%010lu] [%08X] [%08lu] [I] - ", packetCount, dwIoControlCode, nInBufferSize);
+	switch (dwIoControlCode)
+	{
+	case IOCTL_XUSB_GET_INFORMATION:
+		spdlog::info("[I] [IOCTL_XUSB_GET_INFORMATION]              {:Xpn}", spdlog::to_hex(inBuffer));
+		break;
+	case IOCTL_XUSB_GET_CAPABILITIES:
+		spdlog::info("[I] [IOCTL_XUSB_GET_CAPABILITIES]             {:Xpn}", spdlog::to_hex(inBuffer));
+		break;
+	case IOCTL_XUSB_GET_LED_STATE:
+		spdlog::info("[I] [IOCTL_XUSB_GET_LED_STATE]                {:Xpn}", spdlog::to_hex(inBuffer));
+		break;
+	case IOCTL_XUSB_GET_STATE:
+		spdlog::info("[I] [IOCTL_XUSB_GET_STATE]                    {:Xpn}", spdlog::to_hex(inBuffer));
+		break;
+	case IOCTL_XUSB_SET_STATE:
+		spdlog::info("[I] [IOCTL_XUSB_SET_STATE]                    {:Xpn}", spdlog::to_hex(inBuffer));
+		break;
+	case IOCTL_XUSB_WAIT_GUIDE_BUTTON:
+		spdlog::info("[I] [IOCTL_XUSB_WAIT_GUIDE_BUTTON]            {:Xpn}", spdlog::to_hex(inBuffer));
+		break;
+	case IOCTL_XUSB_GET_BATTERY_INFORMATION:
+		spdlog::info("[I] [IOCTL_XUSB_GET_BATTERY_INFORMATION]      {:Xpn}", spdlog::to_hex(inBuffer));
+		break;
+	case IOCTL_XUSB_POWER_DOWN:
+		spdlog::info("[I] [IOCTL_XUSB_POWER_DOWN]                   {:Xpn}", spdlog::to_hex(inBuffer));
+		break;
+	case IOCTL_XUSB_GET_AUDIO_DEVICE_INFORMATION:
+		spdlog::info("[I] [IOCTL_XUSB_GET_AUDIO_DEVICE_INFORMATION] {:Xpn}", spdlog::to_hex(inBuffer));
+		break;
+	case IOCTL_XUSB_WAIT_FOR_INPUT:
+		spdlog::info("[I] [IOCTL_XUSB_WAIT_FOR_INPUT]               {:Xpn}", spdlog::to_hex(inBuffer));
+		break;
+	case IOCTL_XUSB_GET_INFORMATION_EX:
+		spdlog::info("[I] [IOCTL_XUSB_GET_INFORMATION_EX]           {:Xpn}", spdlog::to_hex(inBuffer));
+		break;
+	default:
+		break;
+	}
 
-    for (auto i = 0; i < nInBufferSize; i++)
-    {
-        fprintf(fLog, "%02X ", inBuffer[i]);
-    }
+	auto retval = real_DeviceIoControl(
+		hDevice,
+		dwIoControlCode,
+		lpInBuffer,
+		nInBufferSize,
+		lpOutBuffer,
+		nOutBufferSize,
+		lpBytesReturned,
+		lpOverlapped
+	);
 
-    auto retval = fpDeviceIoControl(hDevice, dwIoControlCode, lpInBuffer, nInBufferSize, lpOutBuffer, nOutBufferSize, lpBytesReturned, lpOverlapped);
+	const PUCHAR charOutBuf = (PUCHAR)lpOutBuffer;
+	const std::vector<char> outBuffer(charOutBuf, charOutBuf + *lpBytesReturned);
 
-    auto outBuffer = static_cast<PUCHAR>(lpOutBuffer);
+	switch (dwIoControlCode)
+	{
+	case IOCTL_XUSB_GET_INFORMATION:
+		spdlog::info("[O] [IOCTL_XUSB_GET_INFORMATION]              {:Xpn}", spdlog::to_hex(outBuffer));
+		break;
+	case IOCTL_XUSB_GET_CAPABILITIES:
+		spdlog::info("[O] [IOCTL_XUSB_GET_CAPABILITIES]             {:Xpn}", spdlog::to_hex(outBuffer));
+		break;
+	case IOCTL_XUSB_GET_LED_STATE:
+		spdlog::info("[O] [IOCTL_XUSB_GET_LED_STATE]                {:Xpn}", spdlog::to_hex(outBuffer));
+		break;
+	case IOCTL_XUSB_GET_STATE:
+		spdlog::info("[O] [IOCTL_XUSB_GET_STATE]                    {:Xpn}", spdlog::to_hex(outBuffer));
+		break;
+	case IOCTL_XUSB_SET_STATE:
+		spdlog::info("[O] [IOCTL_XUSB_SET_STATE]                    {:Xpn}", spdlog::to_hex(outBuffer));
+		break;
+	case IOCTL_XUSB_WAIT_GUIDE_BUTTON:
+		spdlog::info("[O] [IOCTL_XUSB_WAIT_GUIDE_BUTTON]            {:Xpn}", spdlog::to_hex(outBuffer));
+		break;
+	case IOCTL_XUSB_GET_BATTERY_INFORMATION:
+		spdlog::info("[O] [IOCTL_XUSB_GET_BATTERY_INFORMATION]      {:Xpn}", spdlog::to_hex(outBuffer));
+		break;
+	case IOCTL_XUSB_POWER_DOWN:
+		spdlog::info("[O] [IOCTL_XUSB_POWER_DOWN]                   {:Xpn}", spdlog::to_hex(outBuffer));
+		break;
+	case IOCTL_XUSB_GET_AUDIO_DEVICE_INFORMATION:
+		spdlog::info("[O] [IOCTL_XUSB_GET_AUDIO_DEVICE_INFORMATION] {:Xpn}", spdlog::to_hex(outBuffer));
+		break;
+	case IOCTL_XUSB_WAIT_FOR_INPUT:
+		spdlog::info("[O] [IOCTL_XUSB_WAIT_FOR_INPUT]               {:Xpn}", spdlog::to_hex(outBuffer));
+		break;
+	case IOCTL_XUSB_GET_INFORMATION_EX:
+		spdlog::info("[O] [IOCTL_XUSB_GET_INFORMATION_EX]           {:Xpn}", spdlog::to_hex(outBuffer));
+		break;
+	default:
+		break;
+	}
 
-    fprintf(fLog, "\n[%010lu] [%08X] [%08lu] [O] - ", packetCount, dwIoControlCode, *lpBytesReturned);
-
-    for (auto i = 0; i < *lpBytesReturned; i++)
-    {
-        fprintf(fLog, "%02X ", outBuffer[i]);
-    }
-
-    if (dwIoControlCode == 0x8000E00C)
-    {
-        fprintf(stdout ,"\n[%010lu] [%08X] [%08lu] [O] - ", packetCount, dwIoControlCode, *lpBytesReturned);
-
-        for (auto i = 0; i < *lpBytesReturned; i++)
-        {
-            fprintf(stdout, "%02X ", outBuffer[i]);
-        }
-    }
-
-    return retval;
+	return retval;
 }
 
-
-template <typename T>
-inline MH_STATUS MH_CreateHookEx(LPVOID pTarget, LPVOID pDetour, T** ppOriginal)
+BOOL WINAPI DllMain(HINSTANCE dll_handle, DWORD reason, LPVOID reserved)
 {
-    return MH_CreateHook(pTarget, pDetour, reinterpret_cast<LPVOID*>(ppOriginal));
+	if (DetourIsHelperProcess()) {
+		return TRUE;
+	}
+
+	switch (reason) {
+	case DLL_PROCESS_ATTACH:
+	{
+		auto logger = spdlog::basic_logger_mt(
+			"XInputHooker",
+			"XInputHooker.log"
+		);
+
+#if _DEBUG
+		spdlog::set_level(spdlog::level::debug);
+		logger->flush_on(spdlog::level::debug);
+#else
+		logger->flush_on(spdlog::level::info);
+#endif
+
+		spdlog::set_default_logger(logger);
+	}
+
+	DisableThreadLibraryCalls(dll_handle);
+	DetourRestoreAfterWith();
+
+	DetourTransactionBegin();
+	DetourUpdateThread(GetCurrentThread());
+	DetourAttach(&(PVOID)real_SetupDiEnumDeviceInterfaces, DetourSetupDiEnumDeviceInterfaces);
+	DetourAttach(&(PVOID)real_DeviceIoControl, DetourDeviceIoControl);
+	DetourTransactionCommit();
+
+	break;
+
+	case DLL_PROCESS_DETACH:
+		DetourTransactionBegin();
+		DetourUpdateThread(GetCurrentThread());
+		DetourDetach(&(PVOID)real_SetupDiEnumDeviceInterfaces, DetourSetupDiEnumDeviceInterfaces);
+		DetourDetach(&(PVOID)real_DeviceIoControl, DetourDeviceIoControl);
+		DetourTransactionCommit();
+		break;
+	}
+	return TRUE;
 }
-
-template <typename T>
-inline MH_STATUS MH_CreateHookApiEx(
-    LPCWSTR pszModule, LPCSTR pszProcName, LPVOID pDetour, T** ppOriginal)
-{
-    return MH_CreateHookApi(
-        pszModule, pszProcName, pDetour, reinterpret_cast<LPVOID*>(ppOriginal));
-}
-
-int main()
-{
-    fopen_s(&fLog, "xinput.log", "wt");
-    fprintf(fLog, "[Time stamp] [I/O ctrl] [buffsize]\n");
-
-    // Initialize MinHook.
-    if (MH_Initialize() != MH_OK)
-    {
-        return 1;
-    }
-
-    if (MH_CreateHook(&SetupDiEnumDeviceInterfaces, &DetourSetupDiEnumDeviceInterfaces,
-        reinterpret_cast<LPVOID*>(&fpSetupDiEnumDeviceInterfaces)) != MH_OK)
-    {
-        return 1;
-    }
-
-    if (MH_EnableHook(&SetupDiEnumDeviceInterfaces) != MH_OK)
-    {
-        return 1;
-    }
-
-    if (MH_CreateHook(&DeviceIoControl, &DetourDeviceIoControl,
-        reinterpret_cast<LPVOID*>(&fpDeviceIoControl)) != MH_OK)
-    {
-        return 1;
-    }
-
-    if (MH_EnableHook(&DeviceIoControl) != MH_OK)
-    {
-        return 1;
-    }
-
-    auto mod = LoadLibrary(L"xinput1_3.dll");
-    auto enable = reinterpret_cast<XInputEnable_t>(GetProcAddress(mod, "XInputEnable"));
-    auto getState = reinterpret_cast<XInputGetState_t>(GetProcAddress(mod, "XInputGetState"));
-
-    enable(TRUE);
-    XINPUT_STATE state;
-    DWORD retval;
-
-    while ((retval = getState(0, &state)) == ERROR_SUCCESS)
-    {
-        printf("XInputGetState = 0x%X\n", retval);
-        Sleep(50);
-    }
-
-    // Disable the hook for MessageBoxW.
-    if (MH_DisableHook(MH_ALL_HOOKS) != MH_OK)
-    {
-        return 1;
-    }
-
-    // Uninitialize MinHook.
-    if (MH_Uninitialize() != MH_OK)
-    {
-        return 1;
-    }
-
-    return 0;
-}
-
