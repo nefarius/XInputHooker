@@ -17,3 +17,17 @@ This DLL project hooks common Windows APIs used internally by XInput libraries. 
 ## Use
 
 [Inject](https://github.com/nefarius/Injector) the resulting `XInputHooker.dll` into a process/game using any variant of the XInput user API libraries. Upon successful injection a `XInputHooker.log` will be generated in the process root directory. All sniffed API calls will be dumped there. It will grow fast so don't run for too long 😉
+
+## Download
+
+### Latest CI builds
+
+Note: AppVeyor artifacts expire after 6 months, re-building may be required if the download fails.
+
+### x86
+
+- [XInputHooker.dll](https://ci.appveyor.com/api/projects/nefarius/XInputHooker/artifacts/bin/x86/XInputHooker.dll?job=Platform%3A%20x86)
+
+### x64
+
+- [XInputHooker.dll](https://ci.appveyor.com/api/projects/nefarius/XInputHooker/artifacts/bin/x64/XInputHooker.dll?job=Platform%3A%20x64)
