@@ -2,6 +2,8 @@
 
 XInput reverse-engineering tools and documentation
 
+[![Build status](https://ci.appveyor.com/api/projects/status/sifndeu76a3wevof?svg=true)](https://ci.appveyor.com/project/nefarius/xinputhooker)
+
 ## About
 
 This DLL project hooks common Windows APIs used internally by XInput libraries. Compatible device discovery is actually rather primitive, [`SetupDiEnumDeviceInterfaces`](https://docs.microsoft.com/en-us/windows/win32/api/setupapi/nf-setupapi-setupdienumdeviceinterfaces) is called on the XUSB device interface GUID (see `XUSB.h`), on success device handle is obtained via [`CreateFile`](https://docs.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilea) and data exchanged using [`DeviceIoControl`](https://docs.microsoft.com/en-us/windows/win32/api/ioapiset/nf-ioapiset-deviceiocontrol). Said APIs get hooked and the arguments of interest dumped into a log file.
