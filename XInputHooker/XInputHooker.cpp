@@ -9,6 +9,13 @@
 #include "XUSB.h"
 
 //
+// STL
+// 
+#include <string>
+#include <codecvt>
+#include <locale>
+
+//
 // Hooking
 // 
 #include <detours/detours.h>
@@ -20,9 +27,15 @@
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/fmt/bin_to_hex.h>
 
+using convert_t = std::codecvt_utf8<wchar_t>;
+std::wstring_convert<convert_t, wchar_t> strconverter;
+std::mutex mut;
+
 
 static BOOL(WINAPI* real_SetupDiEnumDeviceInterfaces)(HDEVINFO, PSP_DEVINFO_DATA, const GUID*, DWORD, PSP_DEVICE_INTERFACE_DATA) = SetupDiEnumDeviceInterfaces;
 static BOOL(WINAPI* real_DeviceIoControl)(HANDLE, DWORD, LPVOID, DWORD, LPVOID, DWORD, LPDWORD, LPOVERLAPPED) = DeviceIoControl;
+static HANDLE(WINAPI* real_CreateFileA)(LPCSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE) = CreateFileA;
+static HANDLE(WINAPI* real_CreateFileW)(LPCWSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE) = CreateFileW;
 
 
 //
@@ -46,6 +59,64 @@ BOOL WINAPI DetourSetupDiEnumDeviceInterfaces(
 		retval, GetLastError());
 
 	return retval;
+}
+
+//
+// Hooks CreateFileA() API
+// 
+HANDLE WINAPI DetourCreateFileA(
+	LPCSTR                lpFileName,
+	DWORD                 dwDesiredAccess,
+	DWORD                 dwShareMode,
+	LPSECURITY_ATTRIBUTES lpSecurityAttributes,
+	DWORD                 dwCreationDisposition,
+	DWORD                 dwFlagsAndAttributes,
+	HANDLE                hTemplateFile
+)
+{
+	std::string path(lpFileName);
+
+	if (path.rfind("\\\\", 0) == 0)
+		spdlog::info("CreateFileW: lpFileName = {}", path);
+
+	return real_CreateFileA(
+		lpFileName,
+		dwDesiredAccess,
+		dwShareMode,
+		lpSecurityAttributes,
+		dwCreationDisposition,
+		dwFlagsAndAttributes,
+		hTemplateFile
+	);
+}
+
+//
+// Hooks CreateFileW() API
+// 
+HANDLE WINAPI DetourCreateFileW(
+	LPCWSTR               lpFileName,
+	DWORD                 dwDesiredAccess,
+	DWORD                 dwShareMode,
+	LPSECURITY_ATTRIBUTES lpSecurityAttributes,
+	DWORD                 dwCreationDisposition,
+	DWORD                 dwFlagsAndAttributes,
+	HANDLE                hTemplateFile
+)
+{	
+	std::string path(strconverter.to_bytes(lpFileName));
+
+	if (path.rfind("\\\\", 0) == 0)
+		spdlog::info("CreateFileW: lpFileName = {}", path);
+
+	return real_CreateFileW(
+		lpFileName,
+		dwDesiredAccess,
+		dwShareMode,
+		lpSecurityAttributes,
+		dwCreationDisposition,
+		dwFlagsAndAttributes,
+		hTemplateFile
+	);
 }
 
 //
@@ -191,6 +262,8 @@ BOOL WINAPI DllMain(HINSTANCE dll_handle, DWORD reason, LPVOID reserved)
 	DetourUpdateThread(GetCurrentThread());
 	DetourAttach(&(PVOID)real_SetupDiEnumDeviceInterfaces, DetourSetupDiEnumDeviceInterfaces);
 	DetourAttach(&(PVOID)real_DeviceIoControl, DetourDeviceIoControl);
+	DetourAttach(&(PVOID)real_CreateFileA, DetourCreateFileA);
+	DetourAttach(&(PVOID)real_CreateFileW, DetourCreateFileW);
 	DetourTransactionCommit();
 
 	break;
@@ -200,6 +273,8 @@ BOOL WINAPI DllMain(HINSTANCE dll_handle, DWORD reason, LPVOID reserved)
 		DetourUpdateThread(GetCurrentThread());
 		DetourDetach(&(PVOID)real_SetupDiEnumDeviceInterfaces, DetourSetupDiEnumDeviceInterfaces);
 		DetourDetach(&(PVOID)real_DeviceIoControl, DetourDeviceIoControl);
+		DetourDetach(&(PVOID)real_CreateFileA, DetourCreateFileA);
+		DetourDetach(&(PVOID)real_CreateFileW, DetourCreateFileW);
 		DetourTransactionCommit();
 		break;
 	}
