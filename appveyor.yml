@@ -15,7 +15,7 @@ platform:
 - x86
 - x64
 build:
-  project: socksifier.sln
+  project: $(APPVEYOR_BUILD_FOLDER)\$(APPVEYOR_PROJECT_NAME).sln
 artifacts:
 - path: 'bin**\*.dll'
 cache:
