@@ -2,6 +2,7 @@
 // WinAPI
 // 
 #define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
 #include <Windows.h>
 #include <SetupAPI.h>
 #include <Shlwapi.h>
@@ -15,6 +16,7 @@
 #include <string>
 #include <codecvt>
 #include <locale>
+#include <map>
 
 //
 // Hooking
@@ -37,6 +39,8 @@ static BOOL(WINAPI* real_DeviceIoControl)(HANDLE, DWORD, LPVOID, DWORD, LPVOID, 
 static HANDLE(WINAPI* real_CreateFileA)(LPCSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE) = CreateFileA;
 static HANDLE(WINAPI* real_CreateFileW)(LPCWSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE) = CreateFileW;
 
+static std::map<HANDLE, std::string> g_handleToPath;
+
 
 //
 // Hooks SetupDiEnumDeviceInterfaces() API
@@ -50,7 +54,7 @@ BOOL WINAPI DetourSetupDiEnumDeviceInterfaces(
 )
 {
 	std::shared_ptr<spdlog::logger> _logger = spdlog::get("XInputHooker")->clone("SetupDiEnumDeviceInterfaces");
-	
+
 	auto retval = real_SetupDiEnumDeviceInterfaces(DeviceInfoSet, DeviceInfoData, InterfaceClassGuid, MemberIndex, DeviceInterfaceData);
 
 	_logger->info("InterfaceClassGuid = {{{0:X}-{1:X}-{2:X}-{3:X}{4:X}-{5:X}{6:X}{7:X}{8:X}{9:X}{10:X}}}, " \
@@ -82,7 +86,7 @@ HANDLE WINAPI DetourCreateFileA(
 	if (path.rfind("\\\\", 0) == 0)
 		_logger->info("lpFileName = {}", path);
 
-	return real_CreateFileA(
+	const auto handle = real_CreateFileA(
 		lpFileName,
 		dwDesiredAccess,
 		dwShareMode,
@@ -91,6 +95,14 @@ HANDLE WINAPI DetourCreateFileA(
 		dwFlagsAndAttributes,
 		hTemplateFile
 	);
+
+	if (handle != INVALID_HANDLE_VALUE)
+	{
+		g_handleToPath[handle] = path;
+		_logger->info("handle = {}, lpFileName = {}", handle, path);
+	}
+
+	return handle;
 }
 
 //
@@ -112,7 +124,7 @@ HANDLE WINAPI DetourCreateFileW(
 	if (path.rfind("\\\\", 0) == 0)
 		_logger->info("lpFileName = {}", path);
 
-	return real_CreateFileW(
+	const auto handle = real_CreateFileW(
 		lpFileName,
 		dwDesiredAccess,
 		dwShareMode,
@@ -121,6 +133,14 @@ HANDLE WINAPI DetourCreateFileW(
 		dwFlagsAndAttributes,
 		hTemplateFile
 	);
+
+	if (handle != INVALID_HANDLE_VALUE)
+	{
+		g_handleToPath[handle] = path;
+		_logger->info("handle = {}, lpFileName = {}", handle, path);
+	}
+	
+	return handle;
 }
 
 //
@@ -138,6 +158,7 @@ BOOL WINAPI DetourDeviceIoControl(
 )
 {
 	std::shared_ptr<spdlog::logger> _logger = spdlog::get("XInputHooker")->clone("DeviceIoControl");
+	
 	const PUCHAR charInBuf = (PUCHAR)lpInBuffer;
 	const std::vector<char> inBuffer(charInBuf, charInBuf + nInBufferSize);
 
@@ -177,25 +198,34 @@ BOOL WINAPI DetourDeviceIoControl(
 		_logger->info("[I] [IOCTL_XUSB_GET_INFORMATION_EX]           {:Xpn}", spdlog::to_hex(inBuffer));
 		break;
 	default:
-		_logger->warn("Unknown I/O control code: 0x{:X} -> {:Xpn}", dwIoControlCode, spdlog::to_hex(inBuffer));
+		_logger->warn("[I] handle = {}, Unknown I/O control code: 0x{:X} -> {:Xpn}",
+			hDevice,
+			dwIoControlCode, 
+			spdlog::to_hex(inBuffer)
+		);
 		break;
 	}
 
-	auto retval = real_DeviceIoControl(
+	DWORD tmpBytesReturned;
+	
+	const auto retval = real_DeviceIoControl(
 		hDevice,
 		dwIoControlCode,
 		lpInBuffer,
 		nInBufferSize,
 		lpOutBuffer,
 		nOutBufferSize,
-		lpBytesReturned,
+		&tmpBytesReturned, // might be null, use our own variable
 		lpOverlapped
 	);
 
-	if (nOutBufferSize > 0)
+	if (lpBytesReturned)
+		*lpBytesReturned = tmpBytesReturned;
+	
+	if (lpOutBuffer && nOutBufferSize > 0)
 	{
 		const PUCHAR charOutBuf = (PUCHAR)lpOutBuffer;
-		const std::vector<char> outBuffer(charOutBuf, charOutBuf + *lpBytesReturned);
+		const std::vector<char> outBuffer(charOutBuf, charOutBuf + std::min(nOutBufferSize, tmpBytesReturned));
 
 		switch (dwIoControlCode)
 		{
@@ -233,6 +263,11 @@ BOOL WINAPI DetourDeviceIoControl(
 			_logger->info("[O] [IOCTL_XUSB_GET_INFORMATION_EX]           {:Xpn}", spdlog::to_hex(outBuffer));
 			break;
 		default:
+			_logger->warn("[O] handle = {}, Unknown I/O control code: 0x{:X} -> {:Xpn}",
+				hDevice,
+				dwIoControlCode,
+				spdlog::to_hex(inBuffer)
+			);
 			break;
 		}
 	}
@@ -252,7 +287,7 @@ BOOL WINAPI DllMain(HINSTANCE dll_handle, DWORD reason, LPVOID reserved)
 	case DLL_PROCESS_ATTACH:
 	{
 		CHAR dllPath[MAX_PATH];
-			
+
 		GetModuleFileNameA((HINSTANCE)&__ImageBase, dllPath, MAX_PATH);
 		PathRemoveFileSpecA(dllPath);
 
