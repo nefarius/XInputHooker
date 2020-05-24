@@ -4,6 +4,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include <SetupAPI.h>
+#include <Shlwapi.h>
 #include <initguid.h>
 #include <winioctl.h>
 #include "XUSB.h"
@@ -176,6 +177,7 @@ BOOL WINAPI DetourDeviceIoControl(
 		_logger->info("[I] [IOCTL_XUSB_GET_INFORMATION_EX]           {:Xpn}", spdlog::to_hex(inBuffer));
 		break;
 	default:
+		_logger->warn("Unknown I/O control code: 0x{:X} -> {:Xpn}", dwIoControlCode, spdlog::to_hex(inBuffer));
 		break;
 	}
 
@@ -190,50 +192,55 @@ BOOL WINAPI DetourDeviceIoControl(
 		lpOverlapped
 	);
 
-	const PUCHAR charOutBuf = (PUCHAR)lpOutBuffer;
-	const std::vector<char> outBuffer(charOutBuf, charOutBuf + *lpBytesReturned);
-
-	switch (dwIoControlCode)
+	if (nOutBufferSize > 0)
 	{
-	case IOCTL_XUSB_GET_INFORMATION:
-		_logger->info("[O] [IOCTL_XUSB_GET_INFORMATION]              {:Xpn}", spdlog::to_hex(outBuffer));
-		break;
-	case IOCTL_XUSB_GET_CAPABILITIES:
-		_logger->info("[O] [IOCTL_XUSB_GET_CAPABILITIES]             {:Xpn}", spdlog::to_hex(outBuffer));
-		break;
-	case IOCTL_XUSB_GET_LED_STATE:
-		_logger->info("[O] [IOCTL_XUSB_GET_LED_STATE]                {:Xpn}", spdlog::to_hex(outBuffer));
-		break;
-	case IOCTL_XUSB_GET_STATE:
-		_logger->info("[O] [IOCTL_XUSB_GET_STATE]                    {:Xpn}", spdlog::to_hex(outBuffer));
-		break;
-	case IOCTL_XUSB_SET_STATE:
-		_logger->info("[O] [IOCTL_XUSB_SET_STATE]                    {:Xpn}", spdlog::to_hex(outBuffer));
-		break;
-	case IOCTL_XUSB_WAIT_GUIDE_BUTTON:
-		_logger->info("[O] [IOCTL_XUSB_WAIT_GUIDE_BUTTON]            {:Xpn}", spdlog::to_hex(outBuffer));
-		break;
-	case IOCTL_XUSB_GET_BATTERY_INFORMATION:
-		_logger->info("[O] [IOCTL_XUSB_GET_BATTERY_INFORMATION]      {:Xpn}", spdlog::to_hex(outBuffer));
-		break;
-	case IOCTL_XUSB_POWER_DOWN:
-		_logger->info("[O] [IOCTL_XUSB_POWER_DOWN]                   {:Xpn}", spdlog::to_hex(outBuffer));
-		break;
-	case IOCTL_XUSB_GET_AUDIO_DEVICE_INFORMATION:
-		_logger->info("[O] [IOCTL_XUSB_GET_AUDIO_DEVICE_INFORMATION] {:Xpn}", spdlog::to_hex(outBuffer));
-		break;
-	case IOCTL_XUSB_WAIT_FOR_INPUT:
-		_logger->info("[O] [IOCTL_XUSB_WAIT_FOR_INPUT]               {:Xpn}", spdlog::to_hex(outBuffer));
-		break;
-	case IOCTL_XUSB_GET_INFORMATION_EX:
-		_logger->info("[O] [IOCTL_XUSB_GET_INFORMATION_EX]           {:Xpn}", spdlog::to_hex(outBuffer));
-		break;
-	default:
-		break;
+		const PUCHAR charOutBuf = (PUCHAR)lpOutBuffer;
+		const std::vector<char> outBuffer(charOutBuf, charOutBuf + *lpBytesReturned);
+
+		switch (dwIoControlCode)
+		{
+		case IOCTL_XUSB_GET_INFORMATION:
+			_logger->info("[O] [IOCTL_XUSB_GET_INFORMATION]              {:Xpn}", spdlog::to_hex(outBuffer));
+			break;
+		case IOCTL_XUSB_GET_CAPABILITIES:
+			_logger->info("[O] [IOCTL_XUSB_GET_CAPABILITIES]             {:Xpn}", spdlog::to_hex(outBuffer));
+			break;
+		case IOCTL_XUSB_GET_LED_STATE:
+			_logger->info("[O] [IOCTL_XUSB_GET_LED_STATE]                {:Xpn}", spdlog::to_hex(outBuffer));
+			break;
+		case IOCTL_XUSB_GET_STATE:
+			_logger->info("[O] [IOCTL_XUSB_GET_STATE]                    {:Xpn}", spdlog::to_hex(outBuffer));
+			break;
+		case IOCTL_XUSB_SET_STATE:
+			_logger->info("[O] [IOCTL_XUSB_SET_STATE]                    {:Xpn}", spdlog::to_hex(outBuffer));
+			break;
+		case IOCTL_XUSB_WAIT_GUIDE_BUTTON:
+			_logger->info("[O] [IOCTL_XUSB_WAIT_GUIDE_BUTTON]            {:Xpn}", spdlog::to_hex(outBuffer));
+			break;
+		case IOCTL_XUSB_GET_BATTERY_INFORMATION:
+			_logger->info("[O] [IOCTL_XUSB_GET_BATTERY_INFORMATION]      {:Xpn}", spdlog::to_hex(outBuffer));
+			break;
+		case IOCTL_XUSB_POWER_DOWN:
+			_logger->info("[O] [IOCTL_XUSB_POWER_DOWN]                   {:Xpn}", spdlog::to_hex(outBuffer));
+			break;
+		case IOCTL_XUSB_GET_AUDIO_DEVICE_INFORMATION:
+			_logger->info("[O] [IOCTL_XUSB_GET_AUDIO_DEVICE_INFORMATION] {:Xpn}", spdlog::to_hex(outBuffer));
+			break;
+		case IOCTL_XUSB_WAIT_FOR_INPUT:
+			_logger->info("[O] [IOCTL_XUSB_WAIT_FOR_INPUT]               {:Xpn}", spdlog::to_hex(outBuffer));
+			break;
+		case IOCTL_XUSB_GET_INFORMATION_EX:
+			_logger->info("[O] [IOCTL_XUSB_GET_INFORMATION_EX]           {:Xpn}", spdlog::to_hex(outBuffer));
+			break;
+		default:
+			break;
+		}
 	}
 
 	return retval;
 }
+
+EXTERN_C IMAGE_DOS_HEADER __ImageBase;
 
 BOOL WINAPI DllMain(HINSTANCE dll_handle, DWORD reason, LPVOID reserved)
 {
@@ -244,9 +251,14 @@ BOOL WINAPI DllMain(HINSTANCE dll_handle, DWORD reason, LPVOID reserved)
 	switch (reason) {
 	case DLL_PROCESS_ATTACH:
 	{
+		CHAR dllPath[MAX_PATH];
+			
+		GetModuleFileNameA((HINSTANCE)&__ImageBase, dllPath, MAX_PATH);
+		PathRemoveFileSpecA(dllPath);
+
 		auto logger = spdlog::basic_logger_mt(
 			"XInputHooker",
-			"XInputHooker.log"
+			std::string(dllPath) + "\\XInputHooker.log"
 		);
 
 #if _DEBUG
