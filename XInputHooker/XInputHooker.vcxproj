@@ -171,6 +171,11 @@
   <ItemGroup>
     <ClCompile Include="XInputHooker.cpp" />
   </ItemGroup>
+  <ItemGroup>
+	<Content Include="ioctls.json">
+		<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	</Content>
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />
 </Project>
