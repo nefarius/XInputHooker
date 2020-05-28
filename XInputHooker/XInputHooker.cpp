@@ -17,6 +17,13 @@
 #include <codecvt>
 #include <locale>
 #include <map>
+#include <iostream>
+#include <fstream>
+
+//
+// JSON
+// 
+#include <json/json.h>
 
 //
 // Hooking
@@ -32,37 +39,47 @@
 
 using convert_t = std::codecvt_utf8<wchar_t>;
 std::wstring_convert<convert_t, wchar_t> strconverter;
+std::once_flag g_init;
+std::string g_dllDir;
 
 
-static BOOL(WINAPI* real_SetupDiEnumDeviceInterfaces)(HDEVINFO, PSP_DEVINFO_DATA, const GUID*, DWORD, PSP_DEVICE_INTERFACE_DATA) = SetupDiEnumDeviceInterfaces;
-static BOOL(WINAPI* real_DeviceIoControl)(HANDLE, DWORD, LPVOID, DWORD, LPVOID, DWORD, LPDWORD, LPOVERLAPPED) = DeviceIoControl;
-static HANDLE(WINAPI* real_CreateFileA)(LPCSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE) = CreateFileA;
-static HANDLE(WINAPI* real_CreateFileW)(LPCWSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE) = CreateFileW;
+static BOOL (WINAPI* real_SetupDiEnumDeviceInterfaces)(HDEVINFO, PSP_DEVINFO_DATA, const GUID*, DWORD,
+                                                       PSP_DEVICE_INTERFACE_DATA) = SetupDiEnumDeviceInterfaces;
+static BOOL (WINAPI* real_DeviceIoControl)(HANDLE, DWORD, LPVOID, DWORD, LPVOID, DWORD, LPDWORD, LPOVERLAPPED) =
+	DeviceIoControl;
+static HANDLE (WINAPI* real_CreateFileA)(LPCSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE) =
+	CreateFileA;
+static HANDLE (WINAPI* real_CreateFileW)(LPCWSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE) =
+	CreateFileW;
 
 static std::map<HANDLE, std::string> g_handleToPath;
+static std::map<DWORD, std::string> g_ioctlMap;
 
 
 //
 // Hooks SetupDiEnumDeviceInterfaces() API
 // 
 BOOL WINAPI DetourSetupDiEnumDeviceInterfaces(
-	HDEVINFO                  DeviceInfoSet,
-	PSP_DEVINFO_DATA          DeviceInfoData,
+	HDEVINFO DeviceInfoSet,
+	PSP_DEVINFO_DATA DeviceInfoData,
 	const GUID* InterfaceClassGuid,
-	DWORD                     MemberIndex,
+	DWORD MemberIndex,
 	PSP_DEVICE_INTERFACE_DATA DeviceInterfaceData
 )
 {
 	std::shared_ptr<spdlog::logger> _logger = spdlog::get("XInputHooker")->clone("SetupDiEnumDeviceInterfaces");
 
-	auto retval = real_SetupDiEnumDeviceInterfaces(DeviceInfoSet, DeviceInfoData, InterfaceClassGuid, MemberIndex, DeviceInterfaceData);
+	auto retval = real_SetupDiEnumDeviceInterfaces(DeviceInfoSet, DeviceInfoData, InterfaceClassGuid, MemberIndex,
+	                                               DeviceInterfaceData);
 
-	_logger->info("InterfaceClassGuid = {{{0:X}-{1:X}-{2:X}-{3:X}{4:X}-{5:X}{6:X}{7:X}{8:X}{9:X}{10:X}}}, " \
-		"return = 0x{11:X}, error = 0x{12:X}",
-		InterfaceClassGuid->Data1, InterfaceClassGuid->Data2, InterfaceClassGuid->Data3,
-		InterfaceClassGuid->Data4[0], InterfaceClassGuid->Data4[1], InterfaceClassGuid->Data4[2], InterfaceClassGuid->Data4[3],
-		InterfaceClassGuid->Data4[4], InterfaceClassGuid->Data4[5], InterfaceClassGuid->Data4[6], InterfaceClassGuid->Data4[7],
-		retval, GetLastError());
+	_logger->info("InterfaceClassGuid = {{{0:X}-{1:X}-{2:X}-{3:X}{4:X}-{5:X}{6:X}{7:X}{8:X}{9:X}{10:X}}}, "
+	              "return = 0x{11:X}, error = 0x{12:X}",
+	              InterfaceClassGuid->Data1, InterfaceClassGuid->Data2, InterfaceClassGuid->Data3,
+	              InterfaceClassGuid->Data4[0], InterfaceClassGuid->Data4[1], InterfaceClassGuid->Data4[2],
+	              InterfaceClassGuid->Data4[3],
+	              InterfaceClassGuid->Data4[4], InterfaceClassGuid->Data4[5], InterfaceClassGuid->Data4[6],
+	              InterfaceClassGuid->Data4[7],
+	              retval, GetLastError());
 
 	return retval;
 }
@@ -71,19 +88,21 @@ BOOL WINAPI DetourSetupDiEnumDeviceInterfaces(
 // Hooks CreateFileA() API
 // 
 HANDLE WINAPI DetourCreateFileA(
-	LPCSTR                lpFileName,
-	DWORD                 dwDesiredAccess,
-	DWORD                 dwShareMode,
+	LPCSTR lpFileName,
+	DWORD dwDesiredAccess,
+	DWORD dwShareMode,
 	LPSECURITY_ATTRIBUTES lpSecurityAttributes,
-	DWORD                 dwCreationDisposition,
-	DWORD                 dwFlagsAndAttributes,
-	HANDLE                hTemplateFile
+	DWORD dwCreationDisposition,
+	DWORD dwFlagsAndAttributes,
+	HANDLE hTemplateFile
 )
 {
 	std::shared_ptr<spdlog::logger> _logger = spdlog::get("XInputHooker")->clone("CreateFileA");
 	std::string path(lpFileName);
 
-	if (path.rfind("\\\\", 0) == 0)
+	const bool isOfInterest = (path.rfind("\\\\", 0) == 0);
+
+	if (isOfInterest)
 		_logger->info("lpFileName = {}", path);
 
 	const auto handle = real_CreateFileA(
@@ -99,7 +118,8 @@ HANDLE WINAPI DetourCreateFileA(
 	if (handle != INVALID_HANDLE_VALUE)
 	{
 		g_handleToPath[handle] = path;
-		_logger->info("handle = {}, lpFileName = {}", handle, path);
+		if (isOfInterest)
+			_logger->info("handle = {}, lpFileName = {}", handle, path);
 	}
 
 	return handle;
@@ -109,19 +129,21 @@ HANDLE WINAPI DetourCreateFileA(
 // Hooks CreateFileW() API
 // 
 HANDLE WINAPI DetourCreateFileW(
-	LPCWSTR               lpFileName,
-	DWORD                 dwDesiredAccess,
-	DWORD                 dwShareMode,
+	LPCWSTR lpFileName,
+	DWORD dwDesiredAccess,
+	DWORD dwShareMode,
 	LPSECURITY_ATTRIBUTES lpSecurityAttributes,
-	DWORD                 dwCreationDisposition,
-	DWORD                 dwFlagsAndAttributes,
-	HANDLE                hTemplateFile
+	DWORD dwCreationDisposition,
+	DWORD dwFlagsAndAttributes,
+	HANDLE hTemplateFile
 )
 {
 	std::shared_ptr<spdlog::logger> _logger = spdlog::get("XInputHooker")->clone("CreateFileW");
 	std::string path(strconverter.to_bytes(lpFileName));
 
-	if (path.rfind("\\\\", 0) == 0)
+	const bool isOfInterest = (path.rfind("\\\\", 0) == 0);
+
+	if (isOfInterest)
 		_logger->info("lpFileName = {}", path);
 
 	const auto handle = real_CreateFileW(
@@ -137,9 +159,10 @@ HANDLE WINAPI DetourCreateFileW(
 	if (handle != INVALID_HANDLE_VALUE)
 	{
 		g_handleToPath[handle] = path;
-		_logger->info("handle = {}, lpFileName = {}", handle, path);
+		if (isOfInterest)
+			_logger->info("handle = {}, lpFileName = {}", handle, path);
 	}
-	
+
 	return handle;
 }
 
@@ -147,67 +170,32 @@ HANDLE WINAPI DetourCreateFileW(
 // Hooks DeviceIoControl() API
 // 
 BOOL WINAPI DetourDeviceIoControl(
-	HANDLE       hDevice,
-	DWORD        dwIoControlCode,
-	LPVOID       lpInBuffer,
-	DWORD        nInBufferSize,
-	LPVOID       lpOutBuffer,
-	DWORD        nOutBufferSize,
-	LPDWORD      lpBytesReturned,
+	HANDLE hDevice,
+	DWORD dwIoControlCode,
+	LPVOID lpInBuffer,
+	DWORD nInBufferSize,
+	LPVOID lpOutBuffer,
+	DWORD nOutBufferSize,
+	LPDWORD lpBytesReturned,
 	LPOVERLAPPED lpOverlapped
 )
 {
 	std::shared_ptr<spdlog::logger> _logger = spdlog::get("XInputHooker")->clone("DeviceIoControl");
-	
-	const PUCHAR charInBuf = (PUCHAR)lpInBuffer;
+
+	const PUCHAR charInBuf = static_cast<PUCHAR>(lpInBuffer);
 	const std::vector<char> inBuffer(charInBuf, charInBuf + nInBufferSize);
 
-	switch (dwIoControlCode)
+	if (g_ioctlMap.count(dwIoControlCode))
 	{
-	case IOCTL_XUSB_GET_INFORMATION:
-		_logger->info("[I] [IOCTL_XUSB_GET_INFORMATION]              {:Xpn}", spdlog::to_hex(inBuffer));
-		break;
-	case IOCTL_XUSB_GET_CAPABILITIES:
-		_logger->info("[I] [IOCTL_XUSB_GET_CAPABILITIES]             {:Xpn}", spdlog::to_hex(inBuffer));
-		break;
-	case IOCTL_XUSB_GET_LED_STATE:
-		_logger->info("[I] [IOCTL_XUSB_GET_LED_STATE]                {:Xpn}", spdlog::to_hex(inBuffer));
-		break;
-	case IOCTL_XUSB_GET_STATE:
-		_logger->info("[I] [IOCTL_XUSB_GET_STATE]                    {:Xpn}", spdlog::to_hex(inBuffer));
-		break;
-	case IOCTL_XUSB_SET_STATE:
-		_logger->info("[I] [IOCTL_XUSB_SET_STATE]                    {:Xpn}", spdlog::to_hex(inBuffer));
-		break;
-	case IOCTL_XUSB_WAIT_GUIDE_BUTTON:
-		_logger->info("[I] [IOCTL_XUSB_WAIT_GUIDE_BUTTON]            {:Xpn}", spdlog::to_hex(inBuffer));
-		break;
-	case IOCTL_XUSB_GET_BATTERY_INFORMATION:
-		_logger->info("[I] [IOCTL_XUSB_GET_BATTERY_INFORMATION]      {:Xpn}", spdlog::to_hex(inBuffer));
-		break;
-	case IOCTL_XUSB_POWER_DOWN:
-		_logger->info("[I] [IOCTL_XUSB_POWER_DOWN]                   {:Xpn}", spdlog::to_hex(inBuffer));
-		break;
-	case IOCTL_XUSB_GET_AUDIO_DEVICE_INFORMATION:
-		_logger->info("[I] [IOCTL_XUSB_GET_AUDIO_DEVICE_INFORMATION] {:Xpn}", spdlog::to_hex(inBuffer));
-		break;
-	case IOCTL_XUSB_WAIT_FOR_INPUT:
-		_logger->info("[I] [IOCTL_XUSB_WAIT_FOR_INPUT]               {:Xpn}", spdlog::to_hex(inBuffer));
-		break;
-	case IOCTL_XUSB_GET_INFORMATION_EX:
-		_logger->info("[I] [IOCTL_XUSB_GET_INFORMATION_EX]           {:Xpn}", spdlog::to_hex(inBuffer));
-		break;
-	default:
-		_logger->warn("[I] handle = {}, Unknown I/O control code: 0x{:X} -> {:Xpn}",
-			hDevice,
-			dwIoControlCode, 
-			spdlog::to_hex(inBuffer)
+		_logger->info("[I] [{}] ({:04d}) -> {:Xpn}",
+		              g_ioctlMap[dwIoControlCode],
+		              nInBufferSize,
+		              spdlog::to_hex(inBuffer)
 		);
-		break;
 	}
 
 	DWORD tmpBytesReturned;
-	
+
 	const auto retval = real_DeviceIoControl(
 		hDevice,
 		dwIoControlCode,
@@ -221,54 +209,20 @@ BOOL WINAPI DetourDeviceIoControl(
 
 	if (lpBytesReturned)
 		*lpBytesReturned = tmpBytesReturned;
-	
+
 	if (lpOutBuffer && nOutBufferSize > 0)
 	{
-		const PUCHAR charOutBuf = (PUCHAR)lpOutBuffer;
-		const std::vector<char> outBuffer(charOutBuf, charOutBuf + std::min(nOutBufferSize, tmpBytesReturned));
+		const PUCHAR charOutBuf = static_cast<PUCHAR>(lpOutBuffer);
+		const auto bufSize = std::min(nOutBufferSize, tmpBytesReturned);
+		const std::vector<char> outBuffer(charOutBuf, charOutBuf + bufSize);
 
-		switch (dwIoControlCode)
+		if (g_ioctlMap.count(dwIoControlCode))
 		{
-		case IOCTL_XUSB_GET_INFORMATION:
-			_logger->info("[O] [IOCTL_XUSB_GET_INFORMATION]              {:Xpn}", spdlog::to_hex(outBuffer));
-			break;
-		case IOCTL_XUSB_GET_CAPABILITIES:
-			_logger->info("[O] [IOCTL_XUSB_GET_CAPABILITIES]             {:Xpn}", spdlog::to_hex(outBuffer));
-			break;
-		case IOCTL_XUSB_GET_LED_STATE:
-			_logger->info("[O] [IOCTL_XUSB_GET_LED_STATE]                {:Xpn}", spdlog::to_hex(outBuffer));
-			break;
-		case IOCTL_XUSB_GET_STATE:
-			_logger->info("[O] [IOCTL_XUSB_GET_STATE]                    {:Xpn}", spdlog::to_hex(outBuffer));
-			break;
-		case IOCTL_XUSB_SET_STATE:
-			_logger->info("[O] [IOCTL_XUSB_SET_STATE]                    {:Xpn}", spdlog::to_hex(outBuffer));
-			break;
-		case IOCTL_XUSB_WAIT_GUIDE_BUTTON:
-			_logger->info("[O] [IOCTL_XUSB_WAIT_GUIDE_BUTTON]            {:Xpn}", spdlog::to_hex(outBuffer));
-			break;
-		case IOCTL_XUSB_GET_BATTERY_INFORMATION:
-			_logger->info("[O] [IOCTL_XUSB_GET_BATTERY_INFORMATION]      {:Xpn}", spdlog::to_hex(outBuffer));
-			break;
-		case IOCTL_XUSB_POWER_DOWN:
-			_logger->info("[O] [IOCTL_XUSB_POWER_DOWN]                   {:Xpn}", spdlog::to_hex(outBuffer));
-			break;
-		case IOCTL_XUSB_GET_AUDIO_DEVICE_INFORMATION:
-			_logger->info("[O] [IOCTL_XUSB_GET_AUDIO_DEVICE_INFORMATION] {:Xpn}", spdlog::to_hex(outBuffer));
-			break;
-		case IOCTL_XUSB_WAIT_FOR_INPUT:
-			_logger->info("[O] [IOCTL_XUSB_WAIT_FOR_INPUT]               {:Xpn}", spdlog::to_hex(outBuffer));
-			break;
-		case IOCTL_XUSB_GET_INFORMATION_EX:
-			_logger->info("[O] [IOCTL_XUSB_GET_INFORMATION_EX]           {:Xpn}", spdlog::to_hex(outBuffer));
-			break;
-		default:
-			_logger->warn("[O] handle = {}, Unknown I/O control code: 0x{:X} -> {:Xpn}",
-				hDevice,
-				dwIoControlCode,
-				spdlog::to_hex(inBuffer)
+			_logger->info("[O] [{}] ({:04d}) -> {:Xpn}",
+			              g_ioctlMap[dwIoControlCode],
+			              bufSize,
+			              spdlog::to_hex(outBuffer)
 			);
-			break;
 		}
 	}
 
@@ -279,53 +233,68 @@ EXTERN_C IMAGE_DOS_HEADER __ImageBase;
 
 BOOL WINAPI DllMain(HINSTANCE dll_handle, DWORD reason, LPVOID reserved)
 {
-	if (DetourIsHelperProcess()) {
+	if (DetourIsHelperProcess())
+	{
 		return TRUE;
 	}
 
-	switch (reason) {
-	case DLL_PROCESS_ATTACH:
+	switch (reason)
 	{
-		CHAR dllPath[MAX_PATH];
+	case DLL_PROCESS_ATTACH:
+		{
+			CHAR dllPath[MAX_PATH];
 
-		GetModuleFileNameA((HINSTANCE)&__ImageBase, dllPath, MAX_PATH);
-		PathRemoveFileSpecA(dllPath);
+			GetModuleFileNameA((HINSTANCE)&__ImageBase, dllPath, MAX_PATH);
+			PathRemoveFileSpecA(dllPath);
+			g_dllDir = std::string(dllPath);
 
-		auto logger = spdlog::basic_logger_mt(
-			"XInputHooker",
-			std::string(dllPath) + "\\XInputHooker.log"
-		);
+			auto logger = spdlog::basic_logger_mt(
+				"XInputHooker",
+				g_dllDir + "\\XInputHooker.log"
+			);
 
 #if _DEBUG
-		spdlog::set_level(spdlog::level::debug);
-		logger->flush_on(spdlog::level::debug);
+			spdlog::set_level(spdlog::level::debug);
+			logger->flush_on(spdlog::level::debug);
 #else
 		logger->flush_on(spdlog::level::info);
 #endif
 
-		spdlog::set_default_logger(logger);
-	}
+			set_default_logger(logger);
 
-	DisableThreadLibraryCalls(dll_handle);
-	DetourRestoreAfterWith();
+			//
+			// Load known IOCTL code definitions
+			// 
+			Json::Value root;
+			std::ifstream ifs(g_dllDir + "\\ioctls.json");
+			ifs >> root;
 
-	DetourTransactionBegin();
-	DetourUpdateThread(GetCurrentThread());
-	DetourAttach(&(PVOID)real_SetupDiEnumDeviceInterfaces, DetourSetupDiEnumDeviceInterfaces);
-	DetourAttach(&(PVOID)real_DeviceIoControl, DetourDeviceIoControl);
-	DetourAttach(&(PVOID)real_CreateFileA, DetourCreateFileA);
-	DetourAttach(&(PVOID)real_CreateFileW, DetourCreateFileW);
-	DetourTransactionCommit();
+			for (auto& i : root)
+			{
+				g_ioctlMap[std::stoul(i["HexValue"].asString(), nullptr, 16)] = i["Ioctl"].asString();
+			}
+		}
 
-	break;
+		DisableThreadLibraryCalls(dll_handle);
+		DetourRestoreAfterWith();
+
+		DetourTransactionBegin();
+		DetourUpdateThread(GetCurrentThread());
+		DetourAttach(&static_cast<PVOID>(real_SetupDiEnumDeviceInterfaces), DetourSetupDiEnumDeviceInterfaces);
+		DetourAttach(&static_cast<PVOID>(real_DeviceIoControl), DetourDeviceIoControl);
+		DetourAttach(&static_cast<PVOID>(real_CreateFileA), DetourCreateFileA);
+		DetourAttach(&static_cast<PVOID>(real_CreateFileW), DetourCreateFileW);
+		DetourTransactionCommit();
+
+		break;
 
 	case DLL_PROCESS_DETACH:
 		DetourTransactionBegin();
 		DetourUpdateThread(GetCurrentThread());
-		DetourDetach(&(PVOID)real_SetupDiEnumDeviceInterfaces, DetourSetupDiEnumDeviceInterfaces);
-		DetourDetach(&(PVOID)real_DeviceIoControl, DetourDeviceIoControl);
-		DetourDetach(&(PVOID)real_CreateFileA, DetourCreateFileA);
-		DetourDetach(&(PVOID)real_CreateFileW, DetourCreateFileW);
+		DetourDetach(&static_cast<PVOID>(real_SetupDiEnumDeviceInterfaces), DetourSetupDiEnumDeviceInterfaces);
+		DetourDetach(&static_cast<PVOID>(real_DeviceIoControl), DetourDeviceIoControl);
+		DetourDetach(&static_cast<PVOID>(real_CreateFileA), DetourCreateFileA);
+		DetourDetach(&static_cast<PVOID>(real_CreateFileW), DetourCreateFileW);
 		DetourTransactionCommit();
 		break;
 	}
