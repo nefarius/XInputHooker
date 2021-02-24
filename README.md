@@ -16,7 +16,7 @@ This DLL project hooks common Windows APIs used internally by XInput libraries. 
 
 ## Use
 
-[Inject](https://github.com/nefarius/Injector) the resulting `XInputHooker.dll` into a process/game using any variant of the XInput user API libraries. Upon successful injection a `XInputHooker.log` will be generated in the process root directory. All sniffed API calls will be dumped there. It will grow fast so don't run for too long 😉
+Build or download the `XInputHooker.dll` for the right architecture (32-Bit for 32-Bit processes and likewise for 64-Bit) and place the [`ioctls.json`](./XInputHooker/ioctls.json) file in the same directory as the DLL. [Inject](https://github.com/nefarius/Injector) the `XInputHooker.dll` into a process/game using any variant of the XInput user API libraries. Upon successful injection a `XInputHooker.log` will be generated in the process root directory. All sniffed API calls will be dumped there. It will grow fast so don't run for too long 😉
 
 ## Download
 
