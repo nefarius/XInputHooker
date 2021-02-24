@@ -48,6 +48,7 @@ static decltype(DeviceIoControl) *real_DeviceIoControl = DeviceIoControl;
 static decltype(CreateFileA) *real_CreateFileA = CreateFileA;
 static decltype(CreateFileW) *real_CreateFileW = CreateFileW;
 static decltype(WriteFile)* real_WriteFile = WriteFile;
+static decltype(GetOverlappedResult)* real_GetOverlappedResult = GetOverlappedResult;
 
 static std::map<HANDLE, std::string> g_handleToPath;
 static std::map<DWORD, std::string> g_ioctlMap;
@@ -182,12 +183,35 @@ BOOL WINAPI DetourWriteFile(
 	const auto ret =  real_WriteFile(hFile, lpBuffer, nNumberOfBytesToWrite, lpNumberOfBytesWritten, lpOverlapped);
 	const auto error = GetLastError();
 	
-	_logger->info("[I] ret={}, lastError={} ({:04d}) -> {:Xpn}",
+	_logger->info("ret={}, lastError={} ({:04d}) -> {:Xpn}",
 		ret,
 		error,
 		nNumberOfBytesToWrite,
 		spdlog::to_hex(inBuffer)
 	);
+
+	return ret;
+}
+
+BOOL WINAPI DetourGetOverlappedResult(
+	HANDLE       hFile,
+	LPOVERLAPPED lpOverlapped,
+	LPDWORD      lpNumberOfBytesTransferred,
+	BOOL         bWait
+)
+{
+	std::shared_ptr<spdlog::logger> _logger = spdlog::get("XInputHooker")->clone("GetOverlappedResult");
+
+	const auto ret = real_GetOverlappedResult(hFile, lpOverlapped, lpNumberOfBytesTransferred, bWait);
+	const auto error = GetLastError();
+	
+	_logger->info("ret={}, lastError={}, bytesWritten={}",
+		ret,
+		error,
+		(lpNumberOfBytesTransferred) ? *lpNumberOfBytesTransferred : 0
+	);
+	
+	return ret;
 }
 
 //
@@ -309,6 +333,7 @@ BOOL WINAPI DllMain(HINSTANCE dll_handle, DWORD reason, LPVOID reserved)
 		DetourAttach(&static_cast<PVOID>(real_CreateFileA), DetourCreateFileA);
 		DetourAttach(&static_cast<PVOID>(real_CreateFileW), DetourCreateFileW);
 		DetourAttach(&static_cast<PVOID>(real_WriteFile), DetourWriteFile);
+		DetourAttach(&static_cast<PVOID>(real_GetOverlappedResult), DetourGetOverlappedResult);
 		DetourTransactionCommit();
 
 		break;
@@ -321,6 +346,7 @@ BOOL WINAPI DllMain(HINSTANCE dll_handle, DWORD reason, LPVOID reserved)
 		DetourDetach(&static_cast<PVOID>(real_CreateFileA), DetourCreateFileA);
 		DetourDetach(&static_cast<PVOID>(real_CreateFileW), DetourCreateFileW);
 		DetourDetach(&static_cast<PVOID>(real_WriteFile), DetourWriteFile);
+		DetourDetach(&static_cast<PVOID>(real_GetOverlappedResult), DetourGetOverlappedResult);
 		DetourTransactionCommit();
 		break;
 	}
