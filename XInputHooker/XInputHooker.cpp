@@ -43,14 +43,10 @@ std::once_flag g_init;
 std::string g_dllDir;
 
 
-static BOOL (WINAPI* real_SetupDiEnumDeviceInterfaces)(HDEVINFO, PSP_DEVINFO_DATA, const GUID*, DWORD,
-                                                       PSP_DEVICE_INTERFACE_DATA) = SetupDiEnumDeviceInterfaces;
-static BOOL (WINAPI* real_DeviceIoControl)(HANDLE, DWORD, LPVOID, DWORD, LPVOID, DWORD, LPDWORD, LPOVERLAPPED) =
-	DeviceIoControl;
-static HANDLE (WINAPI* real_CreateFileA)(LPCSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE) =
-	CreateFileA;
-static HANDLE (WINAPI* real_CreateFileW)(LPCWSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE) =
-	CreateFileW;
+static decltype(SetupDiEnumDeviceInterfaces) *real_SetupDiEnumDeviceInterfaces = SetupDiEnumDeviceInterfaces;
+static decltype(DeviceIoControl) *real_DeviceIoControl = DeviceIoControl;
+static decltype(CreateFileA) *real_CreateFileA = CreateFileA;
+static decltype(CreateFileW) *real_CreateFileW = CreateFileW;
 
 static std::map<HANDLE, std::string> g_handleToPath;
 static std::map<DWORD, std::string> g_ioctlMap;
