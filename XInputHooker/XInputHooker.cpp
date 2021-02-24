@@ -47,6 +47,7 @@ static decltype(SetupDiEnumDeviceInterfaces) *real_SetupDiEnumDeviceInterfaces =
 static decltype(DeviceIoControl) *real_DeviceIoControl = DeviceIoControl;
 static decltype(CreateFileA) *real_CreateFileA = CreateFileA;
 static decltype(CreateFileW) *real_CreateFileW = CreateFileW;
+static decltype(WriteFile)* real_WriteFile = WriteFile;
 
 static std::map<HANDLE, std::string> g_handleToPath;
 static std::map<DWORD, std::string> g_ioctlMap;
@@ -160,6 +161,33 @@ HANDLE WINAPI DetourCreateFileW(
 	}
 
 	return handle;
+}
+
+//
+// Hooks WriteFile() API
+// 
+BOOL WINAPI DetourWriteFile(
+	HANDLE       hFile,
+	LPCVOID      lpBuffer,
+	DWORD        nNumberOfBytesToWrite,
+	LPDWORD      lpNumberOfBytesWritten,
+	LPOVERLAPPED lpOverlapped
+)
+{
+	std::shared_ptr<spdlog::logger> _logger = spdlog::get("XInputHooker")->clone("WriteFile");
+
+	const PUCHAR charInBuf = PUCHAR(lpBuffer);
+	const std::vector<char> inBuffer(charInBuf, charInBuf + nNumberOfBytesToWrite);
+	
+	const auto ret =  real_WriteFile(hFile, lpBuffer, nNumberOfBytesToWrite, lpNumberOfBytesWritten, lpOverlapped);
+	const auto error = GetLastError();
+	
+	_logger->info("[I] ret={}, lastError={} ({:04d}) -> {:Xpn}",
+		ret,
+		error,
+		nNumberOfBytesToWrite,
+		spdlog::to_hex(inBuffer)
+	);
 }
 
 //
@@ -280,6 +308,7 @@ BOOL WINAPI DllMain(HINSTANCE dll_handle, DWORD reason, LPVOID reserved)
 		DetourAttach(&static_cast<PVOID>(real_DeviceIoControl), DetourDeviceIoControl);
 		DetourAttach(&static_cast<PVOID>(real_CreateFileA), DetourCreateFileA);
 		DetourAttach(&static_cast<PVOID>(real_CreateFileW), DetourCreateFileW);
+		DetourAttach(&static_cast<PVOID>(real_WriteFile), DetourWriteFile);
 		DetourTransactionCommit();
 
 		break;
@@ -291,6 +320,7 @@ BOOL WINAPI DllMain(HINSTANCE dll_handle, DWORD reason, LPVOID reserved)
 		DetourDetach(&static_cast<PVOID>(real_DeviceIoControl), DetourDeviceIoControl);
 		DetourDetach(&static_cast<PVOID>(real_CreateFileA), DetourCreateFileA);
 		DetourDetach(&static_cast<PVOID>(real_CreateFileW), DetourCreateFileW);
+		DetourDetach(&static_cast<PVOID>(real_WriteFile), DetourWriteFile);
 		DetourTransactionCommit();
 		break;
 	}
