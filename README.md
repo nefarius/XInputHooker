@@ -12,7 +12,7 @@ This DLL project hooks common Windows APIs used internally by XInput libraries. 
 
 [Follow the Vcpkg Quick Start](https://github.com/Microsoft/vcpkg#quick-start) and install the following packages:
 
-- `.\vcpkg install spdlog:x86-windows-static spdlog:x64-windows-static detours:x86-windows-static detours:x64-windows-static`
+- `.\vcpkg install spdlog:x86-windows-static spdlog:x64-windows-static detours:x86-windows-static detours:x64-windows-static jsoncpp:x86-windows-static jsoncpp:x64-windows-static`
 
 ## Use
 
