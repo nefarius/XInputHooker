@@ -328,12 +328,12 @@ BOOL WINAPI DllMain(HINSTANCE dll_handle, DWORD reason, LPVOID reserved)
 
 		DetourTransactionBegin();
 		DetourUpdateThread(GetCurrentThread());
-		DetourAttach(&static_cast<PVOID>(real_SetupDiEnumDeviceInterfaces), DetourSetupDiEnumDeviceInterfaces);
-		DetourAttach(&static_cast<PVOID>(real_DeviceIoControl), DetourDeviceIoControl);
-		DetourAttach(&static_cast<PVOID>(real_CreateFileA), DetourCreateFileA);
-		DetourAttach(&static_cast<PVOID>(real_CreateFileW), DetourCreateFileW);
-		DetourAttach(&static_cast<PVOID>(real_WriteFile), DetourWriteFile);
-		DetourAttach(&static_cast<PVOID>(real_GetOverlappedResult), DetourGetOverlappedResult);
+		DetourAttach((PVOID*)&real_SetupDiEnumDeviceInterfaces, DetourSetupDiEnumDeviceInterfaces);
+		DetourAttach((PVOID*)&real_DeviceIoControl, DetourDeviceIoControl);
+		DetourAttach((PVOID*)&real_CreateFileA, DetourCreateFileA);
+		DetourAttach((PVOID*)&real_CreateFileW, DetourCreateFileW);
+		DetourAttach((PVOID*)&real_WriteFile, DetourWriteFile);
+		DetourAttach((PVOID*)&real_GetOverlappedResult, DetourGetOverlappedResult);
 		DetourTransactionCommit();
 
 		break;
@@ -341,12 +341,12 @@ BOOL WINAPI DllMain(HINSTANCE dll_handle, DWORD reason, LPVOID reserved)
 	case DLL_PROCESS_DETACH:
 		DetourTransactionBegin();
 		DetourUpdateThread(GetCurrentThread());
-		DetourDetach(&static_cast<PVOID>(real_SetupDiEnumDeviceInterfaces), DetourSetupDiEnumDeviceInterfaces);
-		DetourDetach(&static_cast<PVOID>(real_DeviceIoControl), DetourDeviceIoControl);
-		DetourDetach(&static_cast<PVOID>(real_CreateFileA), DetourCreateFileA);
-		DetourDetach(&static_cast<PVOID>(real_CreateFileW), DetourCreateFileW);
-		DetourDetach(&static_cast<PVOID>(real_WriteFile), DetourWriteFile);
-		DetourDetach(&static_cast<PVOID>(real_GetOverlappedResult), DetourGetOverlappedResult);
+		DetourDetach((PVOID*)&real_SetupDiEnumDeviceInterfaces, DetourSetupDiEnumDeviceInterfaces);
+		DetourDetach((PVOID*)&real_DeviceIoControl, DetourDeviceIoControl);
+		DetourDetach((PVOID*)&real_CreateFileA, DetourCreateFileA);
+		DetourDetach((PVOID*)&real_CreateFileW, DetourCreateFileW);
+		DetourDetach((PVOID*)&real_WriteFile, DetourWriteFile);
+		DetourDetach((PVOID*)&real_GetOverlappedResult, DetourGetOverlappedResult);
 		DetourTransactionCommit();
 		break;
 	}
