@@ -305,7 +305,7 @@ BOOL WINAPI DllMain(HINSTANCE dll_handle, DWORD reason, LPVOID reserved)
 			spdlog::set_level(spdlog::level::debug);
 			logger->flush_on(spdlog::level::debug);
 #else
-		logger->flush_on(spdlog::level::info);
+			logger->flush_on(spdlog::level::info);
 #endif
 
 			set_default_logger(logger);
