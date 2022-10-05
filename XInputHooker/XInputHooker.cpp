@@ -183,12 +183,18 @@ BOOL WINAPI DetourWriteFile(
 	const auto ret =  real_WriteFile(hFile, lpBuffer, nNumberOfBytesToWrite, lpNumberOfBytesWritten, lpOverlapped);
 	const auto error = GetLastError();
 	
-	_logger->info("ret={}, lastError={} ({:04d}) -> {:Xpn}",
-		ret,
-		error,
-		nNumberOfBytesToWrite,
-		spdlog::to_hex(inBuffer)
-	);
+	// Prevent the logger from causing a crash via exception when it double-detours WriteFile
+	try
+	{
+		_logger->info("={}, lastError={} ({:04d}) -> {:Xpn}",
+			ret,
+			error,
+			nNumberOfBytesToWrite,
+			spdlog::to_hex(inBuffer)
+		);
+	}
+	catch (...)
+	{ }
 
 	return ret;
 }
@@ -305,7 +311,7 @@ BOOL WINAPI DllMain(HINSTANCE dll_handle, DWORD reason, LPVOID reserved)
 			spdlog::set_level(spdlog::level::debug);
 			logger->flush_on(spdlog::level::debug);
 #else
-		logger->flush_on(spdlog::level::info);
+			logger->flush_on(spdlog::level::info);
 #endif
 
 			set_default_logger(logger);
@@ -328,12 +334,12 @@ BOOL WINAPI DllMain(HINSTANCE dll_handle, DWORD reason, LPVOID reserved)
 
 		DetourTransactionBegin();
 		DetourUpdateThread(GetCurrentThread());
-		DetourAttach(&static_cast<PVOID>(real_SetupDiEnumDeviceInterfaces), DetourSetupDiEnumDeviceInterfaces);
-		DetourAttach(&static_cast<PVOID>(real_DeviceIoControl), DetourDeviceIoControl);
-		DetourAttach(&static_cast<PVOID>(real_CreateFileA), DetourCreateFileA);
-		DetourAttach(&static_cast<PVOID>(real_CreateFileW), DetourCreateFileW);
-		DetourAttach(&static_cast<PVOID>(real_WriteFile), DetourWriteFile);
-		DetourAttach(&static_cast<PVOID>(real_GetOverlappedResult), DetourGetOverlappedResult);
+		DetourAttach((PVOID*)&real_SetupDiEnumDeviceInterfaces, DetourSetupDiEnumDeviceInterfaces);
+		DetourAttach((PVOID*)&real_DeviceIoControl, DetourDeviceIoControl);
+		DetourAttach((PVOID*)&real_CreateFileA, DetourCreateFileA);
+		DetourAttach((PVOID*)&real_CreateFileW, DetourCreateFileW);
+		DetourAttach((PVOID*)&real_WriteFile, DetourWriteFile);
+		DetourAttach((PVOID*)&real_GetOverlappedResult, DetourGetOverlappedResult);
 		DetourTransactionCommit();
 
 		break;
@@ -341,12 +347,12 @@ BOOL WINAPI DllMain(HINSTANCE dll_handle, DWORD reason, LPVOID reserved)
 	case DLL_PROCESS_DETACH:
 		DetourTransactionBegin();
 		DetourUpdateThread(GetCurrentThread());
-		DetourDetach(&static_cast<PVOID>(real_SetupDiEnumDeviceInterfaces), DetourSetupDiEnumDeviceInterfaces);
-		DetourDetach(&static_cast<PVOID>(real_DeviceIoControl), DetourDeviceIoControl);
-		DetourDetach(&static_cast<PVOID>(real_CreateFileA), DetourCreateFileA);
-		DetourDetach(&static_cast<PVOID>(real_CreateFileW), DetourCreateFileW);
-		DetourDetach(&static_cast<PVOID>(real_WriteFile), DetourWriteFile);
-		DetourDetach(&static_cast<PVOID>(real_GetOverlappedResult), DetourGetOverlappedResult);
+		DetourDetach((PVOID*)&real_SetupDiEnumDeviceInterfaces, DetourSetupDiEnumDeviceInterfaces);
+		DetourDetach((PVOID*)&real_DeviceIoControl, DetourDeviceIoControl);
+		DetourDetach((PVOID*)&real_CreateFileA, DetourCreateFileA);
+		DetourDetach((PVOID*)&real_CreateFileW, DetourCreateFileW);
+		DetourDetach((PVOID*)&real_WriteFile, DetourWriteFile);
+		DetourDetach((PVOID*)&real_GetOverlappedResult, DetourGetOverlappedResult);
 		DetourTransactionCommit();
 		break;
 	}
