@@ -178,10 +178,16 @@ BOOL WINAPI DetourWriteFile(
 	std::shared_ptr<spdlog::logger> _logger = spdlog::get("XInputHooker")->clone("WriteFile");
 
 	const PUCHAR charInBuf = PUCHAR(lpBuffer);
-	const std::vector<char> inBuffer(charInBuf, charInBuf + nNumberOfBytesToWrite);
+	DWORD tmpBytesWritten;
 	
-	const auto ret =  real_WriteFile(hFile, lpBuffer, nNumberOfBytesToWrite, lpNumberOfBytesWritten, lpOverlapped);
+	const auto ret =  real_WriteFile(hFile, lpBuffer, nNumberOfBytesToWrite, &tmpBytesWritten, lpOverlapped);
 	const auto error = GetLastError();
+
+	if (lpNumberOfBytesWritten)
+		*lpNumberOfBytesWritten = tmpBytesWritten;
+
+	const auto bufSize = std::min(nNumberOfBytesToWrite, tmpBytesWritten);
+	const std::vector<char> inBuffer(charInBuf, charInBuf + bufSize);
 	
 	// Prevent the logger from causing a crash via exception when it double-detours WriteFile
 	try
@@ -189,7 +195,7 @@ BOOL WINAPI DetourWriteFile(
 		_logger->info("={}, lastError={} ({:04d}) -> {:Xpn}",
 			ret,
 			error,
-			nNumberOfBytesToWrite,
+			bufSize,
 			spdlog::to_hex(inBuffer)
 		);
 	}
@@ -207,14 +213,18 @@ BOOL WINAPI DetourGetOverlappedResult(
 )
 {
 	std::shared_ptr<spdlog::logger> _logger = spdlog::get("XInputHooker")->clone("GetOverlappedResult");
+	DWORD tmpBytesTransferred;
 
-	const auto ret = real_GetOverlappedResult(hFile, lpOverlapped, lpNumberOfBytesTransferred, bWait);
+	const auto ret = real_GetOverlappedResult(hFile, lpOverlapped, &tmpBytesTransferred, bWait);
 	const auto error = GetLastError();
+
+	if (lpNumberOfBytesTransferred)
+		*lpNumberOfBytesTransferred = tmpBytesTransferred;
 	
 	_logger->info("ret={}, lastError={}, bytesWritten={}",
 		ret,
 		error,
-		(lpNumberOfBytesTransferred) ? *lpNumberOfBytesTransferred : 0
+		tmpBytesTransferred
 	);
 	
 	return ret;
