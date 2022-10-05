@@ -100,9 +100,6 @@ HANDLE WINAPI DetourCreateFileA(
 
 	const bool isOfInterest = (path.rfind("\\\\", 0) == 0);
 
-	if (isOfInterest)
-		_logger->info("lpFileName = {}", path);
-
 	const auto handle = real_CreateFileA(
 		lpFileName,
 		dwDesiredAccess,
@@ -113,11 +110,10 @@ HANDLE WINAPI DetourCreateFileA(
 		hTemplateFile
 	);
 
-	if (handle != INVALID_HANDLE_VALUE)
+	if (isOfInterest && handle != INVALID_HANDLE_VALUE)
 	{
 		g_handleToPath[handle] = path;
-		if (isOfInterest)
-			_logger->info("handle = {}, lpFileName = {}", handle, path);
+		_logger->info("handle = {}, lpFileName = {}", handle, path);
 	}
 
 	return handle;
@@ -141,9 +137,6 @@ HANDLE WINAPI DetourCreateFileW(
 
 	const bool isOfInterest = (path.rfind("\\\\", 0) == 0);
 
-	if (isOfInterest)
-		_logger->info("lpFileName = {}", path);
-
 	const auto handle = real_CreateFileW(
 		lpFileName,
 		dwDesiredAccess,
@@ -154,11 +147,10 @@ HANDLE WINAPI DetourCreateFileW(
 		hTemplateFile
 	);
 
-	if (handle != INVALID_HANDLE_VALUE)
+	if (isOfInterest && handle != INVALID_HANDLE_VALUE)
 	{
 		g_handleToPath[handle] = path;
-		if (isOfInterest)
-			_logger->info("handle = {}, lpFileName = {}", handle, path);
+		_logger->info("handle = {}, lpFileName = {}", handle, path);
 	}
 
 	return handle;
