@@ -773,6 +773,8 @@
     {"Ioctl":"IOCTL_XUSB_GET_BATTERY_INFORMATION","HexValue":"0x8000e018"},
     {"Ioctl":"IOCTL_XUSB_POWER_DOWN","HexValue":"0x8000a01c"},
     {"Ioctl":"IOCTL_XUSB_GET_AUDIO_DEVICE_INFORMATION","HexValue":"0x8000e020"},
+    {"Ioctl":"IOCTL_XUSB_GET_XINPUT_MANAGEMENT_DRIVER","HexValue":"0x80006380"},
+    {"Ioctl":"IOCTL_XUSB_WAIT_FOR_SYSTEM_BUTTONS","HexValue":"0x8000e384"},
     {"Ioctl":"IOCTL_XUSB_WAIT_FOR_INPUT","HexValue":"0x8000e3ac"},
     {"Ioctl":"IOCTL_XUSB_GET_INFORMATION_EX","HexValue":"0x8000e3fc"}
 ]
