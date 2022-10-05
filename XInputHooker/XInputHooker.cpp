@@ -183,12 +183,18 @@ BOOL WINAPI DetourWriteFile(
 	const auto ret =  real_WriteFile(hFile, lpBuffer, nNumberOfBytesToWrite, lpNumberOfBytesWritten, lpOverlapped);
 	const auto error = GetLastError();
 	
-	_logger->info("ret={}, lastError={} ({:04d}) -> {:Xpn}",
-		ret,
-		error,
-		nNumberOfBytesToWrite,
-		spdlog::to_hex(inBuffer)
-	);
+	// Prevent the logger from causing a crash via exception when it double-detours WriteFile
+	try
+	{
+		_logger->info("={}, lastError={} ({:04d}) -> {:Xpn}",
+			ret,
+			error,
+			nNumberOfBytesToWrite,
+			spdlog::to_hex(inBuffer)
+		);
+	}
+	catch (...)
+	{ }
 
 	return ret;
 }
