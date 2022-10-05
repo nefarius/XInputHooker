@@ -70,14 +70,15 @@ BOOL WINAPI DetourSetupDiEnumDeviceInterfaces(
 	auto retval = real_SetupDiEnumDeviceInterfaces(DeviceInfoSet, DeviceInfoData, InterfaceClassGuid, MemberIndex,
 	                                               DeviceInterfaceData);
 
-	_logger->info("InterfaceClassGuid = {{{0:X}-{1:X}-{2:X}-{3:X}{4:X}-{5:X}{6:X}{7:X}{8:X}{9:X}{10:X}}}, "
-	              "return = 0x{11:X}, error = 0x{12:X}",
+	_logger->info("InterfaceClassGuid = {{{:08X}-{:04X}-{:04X}-{:02X}{:02X}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}}}, "
+	              "success = {}, error = 0x{:08X}",
 	              InterfaceClassGuid->Data1, InterfaceClassGuid->Data2, InterfaceClassGuid->Data3,
 	              InterfaceClassGuid->Data4[0], InterfaceClassGuid->Data4[1], InterfaceClassGuid->Data4[2],
 	              InterfaceClassGuid->Data4[3],
 	              InterfaceClassGuid->Data4[4], InterfaceClassGuid->Data4[5], InterfaceClassGuid->Data4[6],
 	              InterfaceClassGuid->Data4[7],
-	              retval, GetLastError());
+	              retval ? "true" : "false",
+				  retval ? ERROR_SUCCESS : GetLastError());
 
 	return retval;
 }
@@ -184,9 +185,9 @@ BOOL WINAPI DetourWriteFile(
 	// Prevent the logger from causing a crash via exception when it double-detours WriteFile
 	try
 	{
-		_logger->info("={}, lastError={} ({:04d}) -> {:Xpn}",
-			ret,
-			error,
+		_logger->info("success = {}, lastError = 0x{:08X} ({:04d}) -> {:Xpn}",
+			ret ? "true" : "false",
+			ret ? ERROR_SUCCESS : error,
 			bufSize,
 			spdlog::to_hex(inBuffer)
 		);
@@ -213,9 +214,9 @@ BOOL WINAPI DetourGetOverlappedResult(
 	if (lpNumberOfBytesTransferred)
 		*lpNumberOfBytesTransferred = tmpBytesTransferred;
 	
-	_logger->info("ret={}, lastError={}, bytesWritten={}",
-		ret,
-		error,
+	_logger->info("success = {}, lastError = 0x{:08X}, bytesTransferred = {}",
+		ret ? "true" : "false",
+		ret ? ERROR_SUCCESS : error,
 		tmpBytesTransferred
 	);
 	
