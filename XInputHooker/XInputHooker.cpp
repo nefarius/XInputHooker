@@ -184,6 +184,13 @@ BOOL WINAPI DetourWriteFile(
 	{
 		path = g_handleToPath[hFile];
 	}
+#ifndef XINPUTHOOKER_LOG_UNKNOWN_HANDLES
+	else
+	{
+		// Ignore unknown handles
+		return ret;
+	}
+#endif
 
 	const auto bufSize = std::min(nNumberOfBytesToWrite, tmpBytesWritten);
 	const std::vector<char> inBuffer(charInBuf, charInBuf + bufSize);
@@ -226,6 +233,13 @@ BOOL WINAPI DetourGetOverlappedResult(
 	{
 		path = g_handleToPath[hFile];
 	}
+#ifndef XINPUTHOOKER_LOG_UNKNOWN_HANDLES
+	else
+	{
+		// Ignore unknown handles
+		return ret;
+	}
+#endif
 
 	_logger->info("success = {}, lastError = 0x{:08X}, bytesTransferred = {}, path = {}",
 		ret ? "true" : "false",
@@ -256,22 +270,6 @@ BOOL WINAPI DetourDeviceIoControl(
 	const PUCHAR charInBuf = static_cast<PUCHAR>(lpInBuffer);
 	const std::vector<char> inBuffer(charInBuf, charInBuf + nInBufferSize);
 
-	std::string path = "Unknown";
-	if (g_handleToPath.count(hDevice))
-	{
-		path = g_handleToPath[hDevice];
-	}
-
-	if (g_ioctlMap.count(dwIoControlCode))
-	{
-		_logger->info("[I] [{}] path = {} ({:04d}) -> {:Xpn}",
-		              g_ioctlMap[dwIoControlCode],
-		              path,
-		              nInBufferSize,
-		              spdlog::to_hex(inBuffer)
-		);
-	}
-
 	DWORD tmpBytesReturned;
 
 	const auto retval = real_DeviceIoControl(
@@ -287,6 +285,29 @@ BOOL WINAPI DetourDeviceIoControl(
 
 	if (lpBytesReturned)
 		*lpBytesReturned = tmpBytesReturned;
+
+	std::string path = "Unknown";
+	if (g_handleToPath.count(hDevice))
+	{
+		path = g_handleToPath[hDevice];
+	}
+#ifndef XINPUTHOOKER_LOG_UNKNOWN_HANDLES
+	else
+	{
+		// Ignore unknown handles
+		return retval;
+	}
+#endif
+
+	if (g_ioctlMap.count(dwIoControlCode))
+	{
+		_logger->info("[I] [{}] path = {} ({:04d}) -> {:Xpn}",
+		              g_ioctlMap[dwIoControlCode],
+		              path,
+		              nInBufferSize,
+		              spdlog::to_hex(inBuffer)
+		);
+	}
 
 	if (lpOutBuffer && nOutBufferSize > 0)
 	{
