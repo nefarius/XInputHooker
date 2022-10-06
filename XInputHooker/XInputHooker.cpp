@@ -179,15 +179,22 @@ BOOL WINAPI DetourWriteFile(
 	if (lpNumberOfBytesWritten)
 		*lpNumberOfBytesWritten = tmpBytesWritten;
 
+	std::string path = "Unknown";
+	if (g_handleToPath.count(hFile))
+	{
+		path = g_handleToPath[hFile];
+	}
+
 	const auto bufSize = std::min(nNumberOfBytesToWrite, tmpBytesWritten);
 	const std::vector<char> inBuffer(charInBuf, charInBuf + bufSize);
 	
 	// Prevent the logger from causing a crash via exception when it double-detours WriteFile
 	try
 	{
-		_logger->info("success = {}, lastError = 0x{:08X} ({:04d}) -> {:Xpn}",
+		_logger->info("success = {}, lastError = 0x{:08X}, path = {} ({:04d}) -> {:Xpn}",
 			ret ? "true" : "false",
 			ret ? ERROR_SUCCESS : error,
+			path,
 			bufSize,
 			spdlog::to_hex(inBuffer)
 		);
@@ -214,10 +221,17 @@ BOOL WINAPI DetourGetOverlappedResult(
 	if (lpNumberOfBytesTransferred)
 		*lpNumberOfBytesTransferred = tmpBytesTransferred;
 	
-	_logger->info("success = {}, lastError = 0x{:08X}, bytesTransferred = {}",
+	std::string path = "Unknown";
+	if (g_handleToPath.count(hFile))
+	{
+		path = g_handleToPath[hFile];
+	}
+
+	_logger->info("success = {}, lastError = 0x{:08X}, bytesTransferred = {}, path = {}",
 		ret ? "true" : "false",
 		ret ? ERROR_SUCCESS : error,
-		tmpBytesTransferred
+		tmpBytesTransferred,
+		path
 	);
 	
 	return ret;
@@ -242,10 +256,17 @@ BOOL WINAPI DetourDeviceIoControl(
 	const PUCHAR charInBuf = static_cast<PUCHAR>(lpInBuffer);
 	const std::vector<char> inBuffer(charInBuf, charInBuf + nInBufferSize);
 
+	std::string path = "Unknown";
+	if (g_handleToPath.count(hDevice))
+	{
+		path = g_handleToPath[hDevice];
+	}
+
 	if (g_ioctlMap.count(dwIoControlCode))
 	{
-		_logger->info("[I] [{}] ({:04d}) -> {:Xpn}",
+		_logger->info("[I] [{}] path = {} ({:04d}) -> {:Xpn}",
 		              g_ioctlMap[dwIoControlCode],
+		              path,
 		              nInBufferSize,
 		              spdlog::to_hex(inBuffer)
 		);
@@ -275,8 +296,9 @@ BOOL WINAPI DetourDeviceIoControl(
 
 		if (g_ioctlMap.count(dwIoControlCode))
 		{
-			_logger->info("[O] [{}] ({:04d}) -> {:Xpn}",
+			_logger->info("[O] [{}] path = {} ({:04d}) -> {:Xpn}",
 			              g_ioctlMap[dwIoControlCode],
+			              path,
 			              bufSize,
 			              spdlog::to_hex(outBuffer)
 			);
