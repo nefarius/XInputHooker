@@ -48,6 +48,7 @@ static decltype(DeviceIoControl) *real_DeviceIoControl = DeviceIoControl;
 static decltype(CreateFileA) *real_CreateFileA = CreateFileA;
 static decltype(CreateFileW) *real_CreateFileW = CreateFileW;
 static decltype(WriteFile)* real_WriteFile = WriteFile;
+static decltype(CloseHandle)* real_CloseHandle = CloseHandle;
 static decltype(GetOverlappedResult)* real_GetOverlappedResult = GetOverlappedResult;
 
 static std::map<HANDLE, std::string> g_handleToPath;
@@ -208,6 +209,33 @@ BOOL WINAPI DetourWriteFile(
 	}
 	catch (...)
 	{ }
+
+	return ret;
+}
+
+BOOL DetourCloseHandle(
+	HANDLE hObject
+)
+{
+	std::shared_ptr<spdlog::logger> _logger = spdlog::get("XInputHooker")->clone("CloseHandle");
+
+	const auto ret = real_CloseHandle(hObject);
+
+	std::string path = "Unknown";
+	if (g_handleToPath.count(hObject))
+	{
+		path = g_handleToPath[hObject];
+		g_handleToPath.erase(hObject);
+	}
+#ifndef XINPUTHOOKER_LOG_UNKNOWN_HANDLES
+	else
+	{
+		// Ignore unknown handles
+		return ret;
+	}
+#endif
+
+	_logger->info("handle = {}, path = {}", hObject, path);
 
 	return ret;
 }
@@ -385,6 +413,7 @@ BOOL WINAPI DllMain(HINSTANCE dll_handle, DWORD reason, LPVOID reserved)
 		DetourAttach((PVOID*)&real_CreateFileA, DetourCreateFileA);
 		DetourAttach((PVOID*)&real_CreateFileW, DetourCreateFileW);
 		DetourAttach((PVOID*)&real_WriteFile, DetourWriteFile);
+		DetourAttach((PVOID*)&real_CloseHandle, DetourCloseHandle);
 		DetourAttach((PVOID*)&real_GetOverlappedResult, DetourGetOverlappedResult);
 		DetourTransactionCommit();
 
@@ -398,6 +427,7 @@ BOOL WINAPI DllMain(HINSTANCE dll_handle, DWORD reason, LPVOID reserved)
 		DetourDetach((PVOID*)&real_CreateFileA, DetourCreateFileA);
 		DetourDetach((PVOID*)&real_CreateFileW, DetourCreateFileW);
 		DetourDetach((PVOID*)&real_WriteFile, DetourWriteFile);
+		DetourDetach((PVOID*)&real_CloseHandle, DetourCloseHandle);
 		DetourDetach((PVOID*)&real_GetOverlappedResult, DetourGetOverlappedResult);
 		DetourTransactionCommit();
 		break;
