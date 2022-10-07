@@ -112,10 +112,17 @@ HANDLE WINAPI DetourCreateFileA(
 		hTemplateFile
 	);
 
-	if (isOfInterest && handle != INVALID_HANDLE_VALUE)
+	if (isOfInterest)
 	{
-		g_handleToPath[handle] = path;
-		_logger->info("handle = {}, lpFileName = {}", handle, path);
+		if (handle != INVALID_HANDLE_VALUE)
+		{
+			g_handleToPath[handle] = path;
+			_logger->info("handle = {}, lpFileName = {}", handle, path);
+		}
+		else
+		{
+			_logger->info("lpFileName = {}, lastError = {}", path, GetLastError());
+		}
 	}
 
 	return handle;
@@ -149,10 +156,17 @@ HANDLE WINAPI DetourCreateFileW(
 		hTemplateFile
 	);
 
-	if (isOfInterest && handle != INVALID_HANDLE_VALUE)
+	if (isOfInterest)
 	{
-		g_handleToPath[handle] = path;
-		_logger->info("handle = {}, lpFileName = {}", handle, path);
+		if (handle != INVALID_HANDLE_VALUE)
+		{
+			g_handleToPath[handle] = path;
+			_logger->info("handle = {}, lpFileName = {}", handle, path);
+		}
+		else
+		{
+			_logger->info("lpFileName = {}, lastError = {}", path, GetLastError());
+		}
 	}
 
 	return handle;
