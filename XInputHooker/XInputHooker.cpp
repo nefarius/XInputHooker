@@ -54,6 +54,7 @@ static decltype(GetOverlappedResult)* real_GetOverlappedResult = GetOverlappedRe
 
 static std::map<HANDLE, std::string> g_handleToPath;
 static std::map<DWORD, std::string> g_ioctlMap;
+static std::map<DWORD, bool> g_newIoctls;
 
 
 //
@@ -400,6 +401,19 @@ BOOL WINAPI DetourDeviceIoControl(
 		              spdlog::to_hex(inBuffer)
 		);
 	}
+#ifdef XINPUTHOOKER_LOG_UNKNOWN_IOCTLS
+	else
+	{
+		// Add control code to list of unknown codes
+		g_newIoctls[dwIoControlCode] = true;
+		_logger->info("[I] [0x{:08X}] path = {} ({:04d}) -> {:Xpn}",
+		              dwIoControlCode,
+		              path,
+		              nInBufferSize,
+		              spdlog::to_hex(inBuffer)
+		);
+	}
+#endif
 
 	if (lpOutBuffer && nOutBufferSize > 0)
 	{
@@ -416,6 +430,17 @@ BOOL WINAPI DetourDeviceIoControl(
 			              spdlog::to_hex(outBuffer)
 			);
 		}
+#ifdef XINPUTHOOKER_LOG_UNKNOWN_IOCTLS
+		else
+		{
+			_logger->info("[O] [0x{:08X}] path = {} ({:04d}) -> {:Xpn}",
+			              dwIoControlCode,
+			              path,
+			              bufSize,
+			              spdlog::to_hex(outBuffer)
+			);
+		}
+#endif
 	}
 
 	return retval;
@@ -496,6 +521,44 @@ BOOL WINAPI DllMain(HINSTANCE dll_handle, DWORD reason, LPVOID reserved)
 		DetourDetach((PVOID*)&real_CloseHandle, DetourCloseHandle);
 		DetourDetach((PVOID*)&real_GetOverlappedResult, DetourGetOverlappedResult);
 		DetourTransactionCommit();
+
+#ifdef XINPUTHOOKER_LOG_UNKNOWN_IOCTLS
+		if (g_newIoctls.size() > 0)
+		{
+			std::shared_ptr<spdlog::logger> _logger = spdlog::get("XInputHooker")->clone("NewIoctls");
+			_logger->info("New IOCTLs:");
+			for (auto ioctl : g_newIoctls)
+			{
+				DWORD code = ioctl.first;
+				DWORD deviceType = DEVICE_TYPE_FROM_CTL_CODE(code);
+				DWORD function = (code & 0x3FFC) >> 2;
+				DWORD method = METHOD_FROM_CTL_CODE(code);
+				DWORD access = (code & 0xC000) >> 14;
+
+				std::string methodName =
+					method == METHOD_BUFFERED ? "METHOD_BUFFERED" :
+					method == METHOD_IN_DIRECT ? "METHOD_IN_DIRECT" :
+					method == METHOD_OUT_DIRECT ? "METHOD_OUT_DIRECT" :
+					method == METHOD_NEITHER ? "METHOD_NEITHER" :
+					"INVALID_METHOD";
+
+				std::string accessName =
+					method == FILE_ANY_ACCESS ? "FILE_ANY_ACCESS" :
+					method == FILE_READ_ACCESS ? "FILE_READ_ACCESS" :
+					method == FILE_WRITE_ACCESS ? "FILE_WRITE_ACCESS" :
+					method == (FILE_READ_ACCESS | FILE_WRITE_ACCESS) ? "FILE_READ_ACCESS | FILE_WRITE_ACCESS" :
+					"INVALID_ACCESS";
+
+				_logger->info("- Code: {:#8x}  Macro: CTL_CODE({:#4x}, {:#3x}, {}, {})",
+					code,
+					deviceType,
+					function,
+					methodName,
+					accessName
+				);
+			}
+		}
+#endif
 		break;
 	}
 	return TRUE;
