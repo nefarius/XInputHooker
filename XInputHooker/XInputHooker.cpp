@@ -501,19 +501,19 @@ BOOL WINAPI DetourDeviceIoControl(
 		              spdlog::to_hex(inBuffer)
 		);
 	}
-#ifdef XINPUTHOOKER_LOG_UNKNOWN_IOCTLS
 	else
 	{
 		// Add control code to list of unknown codes
 		g_newIoctls[dwIoControlCode] = true;
+#ifdef XINPUTHOOKER_LOG_UNKNOWN_IOCTLS
 		_logger->info("[I] [0x{:08X}] path = {} ({:04d}) -> {:Xpn}",
 		              dwIoControlCode,
 		              path,
 		              nInBufferSize,
 		              spdlog::to_hex(inBuffer)
 		);
-	}
 #endif
+	}
 
 	if (lpOutBuffer && nOutBufferSize > 0)
 	{
@@ -624,7 +624,6 @@ BOOL WINAPI DllMain(HINSTANCE dll_handle, DWORD reason, LPVOID reserved)
 		DetourDetach((PVOID*)&real_GetOverlappedResult, DetourGetOverlappedResult);
 		DetourTransactionCommit();
 
-#ifdef XINPUTHOOKER_LOG_UNKNOWN_IOCTLS
 		if (g_newIoctls.size() > 0)
 		{
 			std::shared_ptr<spdlog::logger> _logger = spdlog::get("XInputHooker")->clone("NewIoctls");
@@ -660,7 +659,6 @@ BOOL WINAPI DllMain(HINSTANCE dll_handle, DWORD reason, LPVOID reserved)
 				);
 			}
 		}
-#endif
 		break;
 	}
 	return TRUE;
