@@ -42,17 +42,26 @@ std::wstring_convert<convert_t, wchar_t> strconverter;
 std::once_flag g_init;
 std::string g_dllDir;
 
+struct ReadFileExDetourParams
+{
+	HANDLE hFile;
+	LPVOID lpBuffer;
+	DWORD  nNumberOfBytesToRead;
+	LPOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine;
+};
 
 static decltype(SetupDiEnumDeviceInterfaces) *real_SetupDiEnumDeviceInterfaces = SetupDiEnumDeviceInterfaces;
 static decltype(DeviceIoControl) *real_DeviceIoControl = DeviceIoControl;
 static decltype(CreateFileA) *real_CreateFileA = CreateFileA;
 static decltype(CreateFileW) *real_CreateFileW = CreateFileW;
 static decltype(ReadFile)* real_ReadFile = ReadFile;
+static decltype(ReadFileEx)* real_ReadFileEx = ReadFileEx;
 static decltype(WriteFile)* real_WriteFile = WriteFile;
 static decltype(CloseHandle)* real_CloseHandle = CloseHandle;
 static decltype(GetOverlappedResult)* real_GetOverlappedResult = GetOverlappedResult;
 
 static std::map<HANDLE, std::string> g_handleToPath;
+static std::map<LPOVERLAPPED, ReadFileExDetourParams> g_overlappedToRoutine;
 static std::map<DWORD, std::string> g_ioctlMap;
 static std::map<DWORD, bool> g_newIoctls;
 
@@ -219,6 +228,96 @@ BOOL WINAPI DetourReadFile(
 		nNumberOfBytesToRead,
 		tmpBytesRead,
 		spdlog::to_hex(outBuffer)
+	);
+
+	return ret;
+}
+
+void ReadFileExCallback(
+	DWORD dwErrorCode,
+	DWORD dwNumberOfBytesTransfered,
+	LPOVERLAPPED lpOverlapped
+)
+{
+	std::shared_ptr<spdlog::logger> _logger = spdlog::get("XInputHooker")->clone("ReadFileExCallback");
+
+	const auto completionParams = g_overlappedToRoutine[lpOverlapped];
+	const auto hFile = completionParams.hFile;
+	const auto buffer = completionParams.lpBuffer;
+	const auto bufferSize = completionParams.nNumberOfBytesToRead;
+	const auto completionRoutine = completionParams.lpCompletionRoutine;
+	g_overlappedToRoutine.erase(lpOverlapped);
+
+	std::string path = "Unknown";
+	if (g_handleToPath.count(hFile))
+	{
+		path = g_handleToPath[hFile];
+	}
+#ifndef XINPUTHOOKER_LOG_UNKNOWN_HANDLES
+	else
+	{
+		// Ignore unknown handles
+		if (completionRoutine)
+			completionRoutine(dwErrorCode, dwNumberOfBytesTransfered, lpOverlapped);
+		return;
+	}
+#endif
+
+	const PUCHAR charInBuf = PUCHAR(buffer);
+	const auto bufSize = std::min(bufferSize, dwNumberOfBytesTransfered);
+	const std::vector<char> outBuffer(charInBuf, charInBuf + bufSize);
+
+	_logger->info("result = 0x{:08X}, path = {} ({:04d}) -> {:Xpn}",
+		dwErrorCode,
+		path,
+		bufSize,
+		spdlog::to_hex(outBuffer)
+	);
+
+	completionRoutine(dwErrorCode, dwNumberOfBytesTransfered, lpOverlapped);
+}
+
+//
+// Hooks ReadFileEx() API
+// 
+BOOL WINAPI DetourReadFileEx(
+	HANDLE       hFile,
+	LPVOID       lpBuffer,
+	DWORD        nNumberOfBytesToRead,
+	LPOVERLAPPED lpOverlapped,
+	LPOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine
+)
+{
+	std::shared_ptr<spdlog::logger> _logger = spdlog::get("XInputHooker")->clone("ReadFileEx");
+
+	std::string path = "Unknown";
+	if (g_handleToPath.count(hFile))
+	{
+		path = g_handleToPath[hFile];
+	}
+#ifndef XINPUTHOOKER_LOG_UNKNOWN_HANDLES
+	else
+	{
+		// Ignore unknown handles
+		return real_ReadFileEx(hFile, lpBuffer, nNumberOfBytesToRead, lpOverlapped, lpCompletionRoutine);
+	}
+#endif
+
+	if (g_overlappedToRoutine.count(lpOverlapped))
+	{
+		_logger->warn("Same OVERLAPPED used multiple times, passing through directly to function");
+		return real_ReadFileEx(hFile, lpBuffer, nNumberOfBytesToRead, lpOverlapped, lpCompletionRoutine);
+	}
+	g_overlappedToRoutine[lpOverlapped] = { hFile, lpBuffer, nNumberOfBytesToRead, lpCompletionRoutine };
+
+	const auto ret = real_ReadFileEx(hFile, lpBuffer, nNumberOfBytesToRead, lpOverlapped, ReadFileExCallback);
+	const auto error = GetLastError();
+
+	_logger->info("success = {}, lastError = 0x{:08X}, path = {}, bufferSize = {}",
+		ret ? "true" : "false",
+		error,
+		path,
+		nNumberOfBytesToRead
 	);
 
 	return ret;
@@ -503,6 +602,7 @@ BOOL WINAPI DllMain(HINSTANCE dll_handle, DWORD reason, LPVOID reserved)
 		DetourAttach((PVOID*)&real_CreateFileA, DetourCreateFileA);
 		DetourAttach((PVOID*)&real_CreateFileW, DetourCreateFileW);
 		DetourAttach((PVOID*)&real_ReadFile, DetourReadFile);
+		DetourAttach((PVOID*)&real_ReadFileEx, DetourReadFileEx);
 		DetourAttach((PVOID*)&real_WriteFile, DetourWriteFile);
 		DetourAttach((PVOID*)&real_CloseHandle, DetourCloseHandle);
 		DetourAttach((PVOID*)&real_GetOverlappedResult, DetourGetOverlappedResult);
@@ -518,6 +618,7 @@ BOOL WINAPI DllMain(HINSTANCE dll_handle, DWORD reason, LPVOID reserved)
 		DetourDetach((PVOID*)&real_CreateFileA, DetourCreateFileA);
 		DetourDetach((PVOID*)&real_CreateFileW, DetourCreateFileW);
 		DetourDetach((PVOID*)&real_ReadFile, DetourReadFile);
+		DetourDetach((PVOID*)&real_ReadFileEx, DetourReadFileEx);
 		DetourDetach((PVOID*)&real_WriteFile, DetourWriteFile);
 		DetourDetach((PVOID*)&real_CloseHandle, DetourCloseHandle);
 		DetourDetach((PVOID*)&real_GetOverlappedResult, DetourGetOverlappedResult);
