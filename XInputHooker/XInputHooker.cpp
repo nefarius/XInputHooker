@@ -651,7 +651,7 @@ BOOL WINAPI DllMain(HINSTANCE dll_handle, DWORD reason, LPVOID reserved)
 					method == (FILE_READ_ACCESS | FILE_WRITE_ACCESS) ? "FILE_READ_ACCESS | FILE_WRITE_ACCESS" :
 					"INVALID_ACCESS";
 
-				_logger->info("- Code: {:#8x}  Macro: CTL_CODE({:#4x}, {:#3x}, {}, {})",
+				_logger->info("- Code: 0x{:08X}  Macro: CTL_CODE(0x{:04X}, 0x{:03X}, {}, {})",
 					code,
 					deviceType,
 					function,
