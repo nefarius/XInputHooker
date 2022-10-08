@@ -17,6 +17,7 @@
 #include <codecvt>
 #include <locale>
 #include <map>
+#include <list>
 #include <iostream>
 #include <fstream>
 
@@ -60,6 +61,7 @@ static decltype(WriteFile)* real_WriteFile = WriteFile;
 static decltype(CloseHandle)* real_CloseHandle = CloseHandle;
 static decltype(GetOverlappedResult)* real_GetOverlappedResult = GetOverlappedResult;
 
+static std::list<std::string> g_driveStrings;
 static std::map<HANDLE, std::string> g_handleToPath;
 static std::map<LPOVERLAPPED, ReadFileExDetourParams> g_overlappedToRoutine;
 static std::map<DWORD, std::string> g_ioctlMap;
@@ -125,6 +127,18 @@ HANDLE WINAPI DetourCreateFileA(
 
 	if (isOfInterest)
 	{
+		// Verify that this is not a regular file path
+		for (auto drive : g_driveStrings)
+		{
+			// //?/C:/...
+			// 0123456
+			if (path.rfind(drive, 4) != std::string::npos)
+			{
+				// Path is to a file, ignore
+				return handle;
+			}
+		}
+
 		if (handle != INVALID_HANDLE_VALUE)
 		{
 			g_handleToPath[handle] = path;
@@ -169,6 +183,18 @@ HANDLE WINAPI DetourCreateFileW(
 
 	if (isOfInterest)
 	{
+		// Verify that this is not a regular file path
+		for (auto drive : g_driveStrings)
+		{
+			// //?/C:/...
+			// 0123456
+			if (path.rfind(drive, 4) != std::string::npos)
+			{
+				// Path is to a file, ignore
+				return handle;
+			}
+		}
+
 		if (handle != INVALID_HANDLE_VALUE)
 		{
 			g_handleToPath[handle] = path;
@@ -590,6 +616,30 @@ BOOL WINAPI DllMain(HINSTANCE dll_handle, DWORD reason, LPVOID reserved)
 			{
 				g_ioctlMap[std::stoul(i["HexValue"].asString(), nullptr, 16)] = i["Ioctl"].asString();
 			}
+
+			// Get available drive names
+			std::vector<WCHAR> buffer(GetLogicalDriveStringsW(0, nullptr));
+			DWORD length = GetLogicalDriveStringsW((DWORD)buffer.size(), buffer.data());
+			if (length >= buffer.size())
+			{
+				buffer.resize(length);
+				GetLogicalDriveStringsW((DWORD)buffer.size(), buffer.data());
+			}
+
+			size_t offset = 0;
+			while (true)
+			{
+				WCHAR* data = buffer.data() + offset;
+				if (offset >= buffer.size() || *data == 0)
+					break;
+	
+				std::string drive(strconverter.to_bytes(data));
+				g_driveStrings.push_back(drive);
+				offset += drive.length() + 1;
+			}
+
+			// Also exclude named pipes
+			g_driveStrings.push_back("pipe\\");
 		}
 
 		DisableThreadLibraryCalls(dll_handle);
