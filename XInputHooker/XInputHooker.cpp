@@ -212,11 +212,12 @@ BOOL WINAPI DetourReadFile(
 	const auto bufSize = std::min(nNumberOfBytesToRead, tmpBytesRead);
 	const std::vector<char> outBuffer(charInBuf, charInBuf + bufSize);
 
-	_logger->info("success = {}, lastError = 0x{:08X}, path = {} ({:04d}) -> {:Xpn}",
+	_logger->info("success = {}, lastError = 0x{:08X}, path = {} bytesToRead: {:04d}, bytesRead: {:04d} -> {:Xpn}",
 		ret ? "true" : "false",
 		ret ? ERROR_SUCCESS : error,
 		path,
-		bufSize,
+		nNumberOfBytesToRead,
+		tmpBytesRead,
 		spdlog::to_hex(outBuffer)
 	);
 
@@ -258,17 +259,17 @@ BOOL WINAPI DetourWriteFile(
 	}
 #endif
 
-	const auto bufSize = std::min(nNumberOfBytesToWrite, tmpBytesWritten);
-	const std::vector<char> inBuffer(charInBuf, charInBuf + bufSize);
+	const std::vector<char> inBuffer(charInBuf, charInBuf + nNumberOfBytesToWrite);
 	
 	// Prevent the logger from causing a crash via exception when it double-detours WriteFile
 	try
 	{
-		_logger->info("success = {}, lastError = 0x{:08X}, path = {} ({:04d}) -> {:Xpn}",
+		_logger->info("success = {}, lastError = 0x{:08X}, path = {}, bytesToWrite: {:04d}, bytesWritten: {:04d} -> {:Xpn}",
 			ret ? "true" : "false",
 			ret ? ERROR_SUCCESS : error,
 			path,
-			bufSize,
+			nNumberOfBytesToWrite,
+			tmpBytesWritten,
 			spdlog::to_hex(inBuffer)
 		);
 	}
