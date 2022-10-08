@@ -259,7 +259,7 @@ BOOL WINAPI DetourReadFile(
 	return ret;
 }
 
-void ReadFileExCallback(
+void CALLBACK ReadFileExCallback(
 	DWORD dwErrorCode,
 	DWORD dwNumberOfBytesTransfered,
 	LPOVERLAPPED lpOverlapped
