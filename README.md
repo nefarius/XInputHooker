@@ -2,7 +2,7 @@
 
 XInput reverse-engineering tools and documentation
 
-[![Build status](https://ci.appveyor.com/api/projects/status/sifndeu76a3wevof?svg=true)](https://ci.appveyor.com/project/nefarius/xinputhooker)
+![GitHub Workflow Status](https://img.shields.io/github/workflow/status/nefarius/XInputHooker/MSBuild)
 
 ## About
 
