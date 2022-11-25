@@ -22,7 +22,7 @@ Build or download the `XInputHooker.dll` for the right architecture (32-Bit for 
 
 ### Latest CI builds
 
-Note: AppVeyor artifacts expire after 6 months, re-building may be required if the download fails.
+Note: AppVeyor artifacts expire after 1 month, so the links might not work if no new build has happened ever since.
 
 ### x86
 
