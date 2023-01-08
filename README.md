@@ -2,7 +2,7 @@
 
 XInput reverse-engineering tools and documentation
 
-![GitHub Workflow Status](https://img.shields.io/github/workflow/status/nefarius/XInputHooker/MSBuild)
+![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/nefarius/XInputHooker/msbuild.yml)
 
 ## About
 
