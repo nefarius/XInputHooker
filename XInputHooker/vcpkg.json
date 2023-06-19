@@ -1,0 +1,12 @@
+{
+  "name": "xinputhooker",
+  "version": "1.0.0",
+  "description": "xinputhooker",
+  "license": "MIT",
+  "supports": "!(arm | uwp)",
+  "dependencies": [
+    "spdlog",
+    "detours",
+    "jsoncpp"
+  ]
+}
