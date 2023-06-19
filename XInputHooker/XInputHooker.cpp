@@ -703,10 +703,10 @@ BOOL WINAPI DllMain(HINSTANCE dll_handle, DWORD reason, LPVOID reserved)
 					"INVALID_METHOD";
 
 				std::string accessName =
-					method == FILE_ANY_ACCESS ? "FILE_ANY_ACCESS" :
-					method == FILE_READ_ACCESS ? "FILE_READ_ACCESS" :
-					method == FILE_WRITE_ACCESS ? "FILE_WRITE_ACCESS" :
-					method == (FILE_READ_ACCESS | FILE_WRITE_ACCESS) ? "FILE_READ_ACCESS | FILE_WRITE_ACCESS" :
+					access == FILE_ANY_ACCESS ? "FILE_ANY_ACCESS" :
+					access == FILE_READ_ACCESS ? "FILE_READ_ACCESS" :
+					access == FILE_WRITE_ACCESS ? "FILE_WRITE_ACCESS" :
+					access == (FILE_READ_ACCESS | FILE_WRITE_ACCESS) ? "FILE_READ_ACCESS | FILE_WRITE_ACCESS" :
 					"INVALID_ACCESS";
 
 				_logger->info("- Code: 0x{:08X}  Macro: CTL_CODE(0x{:04X}, 0x{:03X}, {}, {})",
