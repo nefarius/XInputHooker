@@ -243,3 +243,4 @@ ModelManifest.xml
 
 # FAKE - F# Make
 .fake/
+/XInputHooker/vcpkg_installed

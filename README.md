@@ -10,13 +10,11 @@ This DLL project hooks common Windows APIs used internally by XInput libraries. 
 
 ## Build
 
-[Follow the Vcpkg Quick Start](https://github.com/Microsoft/vcpkg#quick-start) and install the following packages:
-
-- `.\vcpkg install spdlog:x86-windows-static spdlog:x64-windows-static detours:x86-windows-static detours:x64-windows-static jsoncpp:x86-windows-static jsoncpp:x64-windows-static`
+Requires Visual Studio 2022 to build.
 
 ## Use
 
-Build or download the `XInputHooker.dll` for the right architecture (32-Bit for 32-Bit processes and likewise for 64-Bit) and place the [`ioctls.json`](./XInputHooker/ioctls.json) file in the same directory as the DLL. [Inject](https://github.com/nefarius/Injector) the `XInputHooker.dll` into a process/game using any variant of the XInput user API libraries. Upon successful injection a `XInputHooker.log` will be generated in the process root directory. All sniffed API calls will be dumped there. It will grow fast so don't run for too long 😉
+Build the `XInputHooker.dll` for the right architecture (32-Bit for 32-Bit processes and likewise for 64-Bit) and place the [`ioctls.json`](./XInputHooker/ioctls.json) file in the same directory as the DLL. [Inject](https://github.com/nefarius/Injector) the `XInputHooker.dll` into a process/game using any variant of the XInput user API libraries. Upon successful injection a `XInputHooker.log` will be generated in the process root directory. All sniffed API calls will be dumped there. It will grow fast so don't run for too long 😉
 
 <!--
 ## Download
