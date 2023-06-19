@@ -38,6 +38,13 @@
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/fmt/bin_to_hex.h>
 
+//
+// Feature flags
+// 
+#define XINPUTHOOKER_LOG_UNKNOWN_IOCTLS
+//#define XINPUTHOOKER_LOG_UNKNOWN_HANDLES
+
+
 using convert_t = std::codecvt_utf8<wchar_t>;
 std::wstring_convert<convert_t, wchar_t> strconverter;
 std::once_flag g_init;
@@ -79,10 +86,10 @@ BOOL WINAPI DetourSetupDiEnumDeviceInterfaces(
 	PSP_DEVICE_INTERFACE_DATA DeviceInterfaceData
 )
 {
-	std::shared_ptr<spdlog::logger> _logger = spdlog::get("XInputHooker")->clone("SetupDiEnumDeviceInterfaces");
+	const std::shared_ptr<spdlog::logger> _logger = spdlog::get("XInputHooker")->clone("SetupDiEnumDeviceInterfaces");
 
-	auto retval = real_SetupDiEnumDeviceInterfaces(DeviceInfoSet, DeviceInfoData, InterfaceClassGuid, MemberIndex,
-	                                               DeviceInterfaceData);
+	const auto retval = real_SetupDiEnumDeviceInterfaces(DeviceInfoSet, DeviceInfoData, InterfaceClassGuid, MemberIndex,
+	                                                     DeviceInterfaceData);
 
 	_logger->info("InterfaceClassGuid = {{{:08X}-{:04X}-{:04X}-{:02X}{:02X}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}}}, "
 	              "success = {}, error = 0x{:08X}",
@@ -110,7 +117,7 @@ HANDLE WINAPI DetourCreateFileA(
 	HANDLE hTemplateFile
 )
 {
-	std::shared_ptr<spdlog::logger> _logger = spdlog::get("XInputHooker")->clone("CreateFileA");
+	const std::shared_ptr<spdlog::logger> _logger = spdlog::get("XInputHooker")->clone("CreateFileA");
 	std::string path(lpFileName);
 
 	const bool isOfInterest = (path.rfind("\\\\", 0) == 0);
@@ -128,7 +135,7 @@ HANDLE WINAPI DetourCreateFileA(
 	if (isOfInterest)
 	{
 		// Verify that this is not a regular file path
-		for (auto drive : g_driveStrings)
+		for (const auto& drive : g_driveStrings)
 		{
 			// //?/C:/...
 			// 0123456
@@ -166,7 +173,7 @@ HANDLE WINAPI DetourCreateFileW(
 	HANDLE hTemplateFile
 )
 {
-	std::shared_ptr<spdlog::logger> _logger = spdlog::get("XInputHooker")->clone("CreateFileW");
+	const std::shared_ptr<spdlog::logger> _logger = spdlog::get("XInputHooker")->clone("CreateFileW");
 	std::string path(strconverter.to_bytes(lpFileName));
 
 	const bool isOfInterest = (path.rfind("\\\\", 0) == 0);
@@ -184,7 +191,7 @@ HANDLE WINAPI DetourCreateFileW(
 	if (isOfInterest)
 	{
 		// Verify that this is not a regular file path
-		for (auto drive : g_driveStrings)
+		for (const auto& drive : g_driveStrings)
 		{
 			// //?/C:/...
 			// 0123456
@@ -220,7 +227,7 @@ BOOL WINAPI DetourReadFile(
 	LPOVERLAPPED lpOverlapped
 )
 {
-	std::shared_ptr<spdlog::logger> _logger = spdlog::get("XInputHooker")->clone("ReadFile");
+	const std::shared_ptr<spdlog::logger> _logger = spdlog::get("XInputHooker")->clone("ReadFile");
 
 	const PUCHAR charInBuf = PUCHAR(lpBuffer);
 	DWORD tmpBytesRead;
@@ -265,7 +272,7 @@ void CALLBACK ReadFileExCallback(
 	LPOVERLAPPED lpOverlapped
 )
 {
-	std::shared_ptr<spdlog::logger> _logger = spdlog::get("XInputHooker")->clone("ReadFileExCallback");
+	const std::shared_ptr<spdlog::logger> _logger = spdlog::get("XInputHooker")->clone("ReadFileExCallback");
 
 	const auto completionParams = g_overlappedToRoutine[lpOverlapped];
 	const auto hFile = completionParams.hFile;
@@ -314,7 +321,7 @@ BOOL WINAPI DetourReadFileEx(
 	LPOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine
 )
 {
-	std::shared_ptr<spdlog::logger> _logger = spdlog::get("XInputHooker")->clone("ReadFileEx");
+	const std::shared_ptr<spdlog::logger> _logger = spdlog::get("XInputHooker")->clone("ReadFileEx");
 
 	std::string path = "Unknown";
 	if (g_handleToPath.count(hFile))
@@ -360,7 +367,7 @@ BOOL WINAPI DetourWriteFile(
 	LPOVERLAPPED lpOverlapped
 )
 {
-	std::shared_ptr<spdlog::logger> _logger = spdlog::get("XInputHooker")->clone("WriteFile");
+	const std::shared_ptr<spdlog::logger> _logger = spdlog::get("XInputHooker")->clone("WriteFile");
 
 	const PUCHAR charInBuf = PUCHAR(lpBuffer);
 	DWORD tmpBytesWritten;
@@ -408,7 +415,7 @@ BOOL DetourCloseHandle(
 	HANDLE hObject
 )
 {
-	std::shared_ptr<spdlog::logger> _logger = spdlog::get("XInputHooker")->clone("CloseHandle");
+	const std::shared_ptr<spdlog::logger> _logger = spdlog::get("XInputHooker")->clone("CloseHandle");
 
 	const auto ret = real_CloseHandle(hObject);
 
@@ -438,7 +445,7 @@ BOOL WINAPI DetourGetOverlappedResult(
 	BOOL         bWait
 )
 {
-	std::shared_ptr<spdlog::logger> _logger = spdlog::get("XInputHooker")->clone("GetOverlappedResult");
+	const std::shared_ptr<spdlog::logger> _logger = spdlog::get("XInputHooker")->clone("GetOverlappedResult");
 	DWORD tmpBytesTransferred;
 
 	const auto ret = real_GetOverlappedResult(hFile, lpOverlapped, &tmpBytesTransferred, bWait);
@@ -484,7 +491,7 @@ BOOL WINAPI DetourDeviceIoControl(
 	LPOVERLAPPED lpOverlapped
 )
 {
-	std::shared_ptr<spdlog::logger> _logger = spdlog::get("XInputHooker")->clone("DeviceIoControl");
+	const std::shared_ptr<spdlog::logger> _logger = spdlog::get("XInputHooker")->clone("DeviceIoControl");
 
 	const PUCHAR charInBuf = static_cast<PUCHAR>(lpInBuffer);
 	const std::vector<char> inBuffer(charInBuf, charInBuf + nInBufferSize);
@@ -572,6 +579,7 @@ BOOL WINAPI DetourDeviceIoControl(
 	return retval;
 }
 
+
 EXTERN_C IMAGE_DOS_HEADER __ImageBase;
 
 BOOL WINAPI DllMain(HINSTANCE dll_handle, DWORD reason, LPVOID reserved)
@@ -581,6 +589,7 @@ BOOL WINAPI DllMain(HINSTANCE dll_handle, DWORD reason, LPVOID reserved)
 		return TRUE;
 	}
 
+	// ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement
 	switch (reason)
 	{
 	case DLL_PROCESS_ATTACH:
@@ -639,7 +648,7 @@ BOOL WINAPI DllMain(HINSTANCE dll_handle, DWORD reason, LPVOID reserved)
 			}
 
 			// Also exclude named pipes
-			g_driveStrings.push_back("pipe\\");
+			g_driveStrings.emplace_back("pipe\\");
 		}
 
 		DisableThreadLibraryCalls(dll_handle);
@@ -674,7 +683,7 @@ BOOL WINAPI DllMain(HINSTANCE dll_handle, DWORD reason, LPVOID reserved)
 		DetourDetach((PVOID*)&real_GetOverlappedResult, DetourGetOverlappedResult);
 		DetourTransactionCommit();
 
-		if (g_newIoctls.size() > 0)
+		if (!g_newIoctls.empty())
 		{
 			std::shared_ptr<spdlog::logger> _logger = spdlog::get("XInputHooker")->clone("NewIoctls");
 			_logger->info("New IOCTLs:");
