@@ -28,11 +28,10 @@ jobs:
     - name: Add MSBuild to PATH
       uses: microsoft/setup-msbuild@v1.0.2
 
-    - name: Install vcpkg deps
+    - name: Register vcpkg
       run: |
         vcpkg integrate install
         vcpkg upgrade --no-dry-run
-        vcpkg install spdlog:x86-windows-static spdlog:x64-windows-static detours:x86-windows-static detours:x64-windows-static jsoncpp:x86-windows-static jsoncpp:x64-windows-static
   
     - name: Build x64
       working-directory: ${{env.GITHUB_WORKSPACE}}
@@ -56,11 +55,10 @@ jobs:
     - name: Add MSBuild to PATH
       uses: microsoft/setup-msbuild@v1.0.2
 
-    - name: Install vcpkg deps
+    - name: Register vcpkg
       run: |
         vcpkg integrate install
         vcpkg upgrade --no-dry-run
-        vcpkg install spdlog:x86-windows-static spdlog:x64-windows-static detours:x86-windows-static detours:x64-windows-static jsoncpp:x86-windows-static jsoncpp:x64-windows-static
   
     - name: Build x86
       working-directory: ${{env.GITHUB_WORKSPACE}}
