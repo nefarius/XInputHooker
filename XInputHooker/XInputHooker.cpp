@@ -21,6 +21,9 @@
 #include <iostream>
 #include <fstream>
 
+#include <nefarius/neflib/UniUtil.hpp>
+using namespace nefarius::utilities;
+
 //
 // JSON
 // 
@@ -45,8 +48,6 @@
 //#define XINPUTHOOKER_LOG_UNKNOWN_HANDLES
 
 
-using convert_t = std::codecvt_utf8<wchar_t>;
-std::wstring_convert<convert_t, wchar_t> strconverter;
 std::once_flag g_init;
 std::string g_dllDir;
 
@@ -174,9 +175,9 @@ HANDLE WINAPI DetourCreateFileW(
 )
 {
 	const std::shared_ptr<spdlog::logger> _logger = spdlog::get("XInputHooker")->clone("CreateFileW");
-	std::string path(strconverter.to_bytes(lpFileName));
+	std::string path(ConvertWideToANSI(lpFileName));
 
-	const bool isOfInterest = (path.rfind("\\\\", 0) == 0);
+	const bool isOfInterest = (path.starts_with("\\\\"));
 
 	const auto handle = real_CreateFileW(
 		lpFileName,
@@ -642,7 +643,7 @@ BOOL WINAPI DllMain(HINSTANCE dll_handle, DWORD reason, LPVOID reserved)
 				if (offset >= buffer.size() || *data == 0)
 					break;
 	
-				std::string drive(strconverter.to_bytes(data));
+				std::string drive(ConvertWideToANSI(data));
 				g_driveStrings.push_back(drive);
 				offset += drive.length() + 1;
 			}
